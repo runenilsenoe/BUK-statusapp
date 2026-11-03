@@ -1,0 +1,63 @@
+@page "/teams/import"
+@rendermode InteractiveServer
+@inject TeamService TeamService
+
+<PageTitle>Importer lagordning · BUK Status</PageTitle>
+
+<p><a href="teams">← Alle lag</a></p>
+<h1>Importer lagordning</h1>
+
+<p class="muted" style="max-width: 760px;">
+    Kopier kolonnene <strong>Person ID</strong>, <strong>Navn</strong> og <strong>Lagordning</strong> fra arket
+    «Medlemmer» i regnearket og lim dem inn her, én person per linje. Lag som ikke finnes, blir opprettet, og personer
+    som står på et annet lag, flyttes. Lagleder og tillegg setter du etterpå på hvert lag.
+</p>
+
+<textarea @bind="text" placeholder="Person ID    Navn    Lagordning  (lim inn fra Excel)" aria-label="Lagordning"></textarea>
+
+<div class="toolbar" style="margin-top: 0.75rem;">
+    <button type="button" class="primary" disabled="@(busy || string.IsNullOrWhiteSpace(text))" @onclick="Import">Importer</button>
+</div>
+
+@if (result is not null)
+{
+    <div class="notice">
+        <p style="margin: 0;">
+            @result.Added nye, @result.Moved flyttet, @result.Unchanged uendret.
+            @if (result.TeamsCreated > 0)
+            {
+                <span> @result.TeamsCreated nye lag opprettet.</span>
+            }
+        </p>
+        @if (result.Errors.Count > 0)
+        {
+            <ul>
+                @foreach (var line in result.Errors)
+                {
+                    <li>@line</li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+@code {
+    private string text = "";
+    private TeamService.ImportResult? result;
+    private bool busy;
+
+    private async Task Import()
+    {
+        busy = true;
+        try
+        {
+            result = await TeamService.ImportAsync(text);
+            if (result.Errors.Count == 0)
+                text = "";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

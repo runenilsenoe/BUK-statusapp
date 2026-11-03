@@ -1,0 +1,177 @@
+@page "/report"
+@rendermode InteractiveServer
+@inject TeamReportService Reports
+@inject NavigationManager Navigation
+
+<PageTitle>Månedsrapport · BUK Status</PageTitle>
+
+<div class="page-header">
+    <h1>Månedsrapport @Format.MonthName(month) @year</h1>
+    <div class="actions">
+        <button type="button" @onclick="() => Move(-1)">← Forrige</button>
+        <input type="month" value="@($"{year:0000}-{month:00}")" @onchange="PickMonth" aria-label="Velg måned" />
+        <button type="button" @onclick="() => Move(1)">Neste →</button>
+    </div>
+</div>
+
+@if (error is not null)
+{
+    <p class="alert">@error</p>
+}
+
+@if (report is null)
+{
+    <p class="muted">Henter bidrag for alle lag …</p>
+}
+else if (report.Teams.Count == 0)
+{
+    <div class="empty"><p>Ingen lag ennå.</p><p class="muted"><a href="teams">Opprett lag</a> først.</p></div>
+}
+else
+{
+    @if (report.CumulativeTargetPercent == 0)
+    {
+        <p class="notice">Månedsmål for @year mangler, så målene vises som 0. <a href="settings/targets">Sett månedsmål</a>.</p>
+    }
+    else
+    {
+        <p class="muted">
+            Mål for @Format.MonthName(month): @Format.Pct(report.MonthTargetPercent * 100) av årsmålet
+            (@Format.Pct(report.CumulativeTargetPercent * 100) akkumulert).
+            @if (report.MembersWithoutStatus > 0)
+            {
+                <span> @report.MembersWithoutStatus på lagene mangler status fra BCC og teller med mål 0.</span>
+            }
+        </p>
+    }
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th rowspan="2">Lag</th>
+                    <th colspan="3" class="group">@Format.MonthName(month)</th>
+                    <th colspan="3" class="group">Akkumulert</th>
+                    <th colspan="3" class="group">Totalt @year</th>
+                </tr>
+                <tr>
+                    <th class="num">Mål</th><th class="num">Innsamlet</th><th class="num">%</th>
+                    <th class="num">Mål</th><th class="num">Innsamlet</th><th class="num">%</th>
+                    <th class="num">Mål</th><th class="num">Innsamlet</th><th class="num">%</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var team in report.Teams)
+                {
+                    var open = expanded.Contains(team.Name);
+                    <tr class="team-row" @onclick="() => Toggle(team.Name)" aria-expanded="@open">
+                        <td>
+                            <strong>@(open ? "▾" : "▸") @team.Name</strong>
+                            <span class="muted small"> @team.MemberCount pers.@(team.LeaderName is null ? "" : $" · {team.LeaderName}")</span>
+                        </td>
+                        <td class="num">@Format.Kr(team.MonthTarget)</td>
+                        <td class="num">@Format.Kr(team.MonthCollected)</td>
+                        <td class="num"><Pct Value="team.MonthPercent" /></td>
+                        <td class="num">@Format.Kr(team.AccumulatedTarget)</td>
+                        <td class="num">@Format.Kr(team.AccumulatedCollected)</td>
+                        <td class="num"><Pct Value="team.AccumulatedPercent" /></td>
+                        <td class="num">@Format.Kr(team.YearTarget)</td>
+                        <td class="num">@Format.Kr(team.YearCollected)</td>
+                        <td class="num"><Pct Value="team.YearPercent" /></td>
+                    </tr>
+                    @if (open)
+                    {
+                        @foreach (var member in team.Members)
+                        {
+                            <tr class="member-row">
+                                <td style="padding-left: 2rem;">@(member.DisplayName ?? $"Person {member.PersonId}")</td>
+                                <td class="num">–</td>
+                                <td class="num">@Format.Kr(member.MonthCollected)</td>
+                                <td></td>
+                                <td class="num">@Format.Kr(member.YearTarget * report.CumulativeTargetPercent)</td>
+                                <td class="num">@Format.Kr(member.AccumulatedCollected)</td>
+                                <td class="num">
+                                    @if (member.YearTarget > 0 && report.CumulativeTargetPercent > 0)
+                                    {
+                                        <Pct Value="member.AccumulatedCollected / (member.YearTarget * report.CumulativeTargetPercent) * 100" />
+                                    }
+                                    else
+                                    {
+                                        <span>–</span>
+                                    }
+                                </td>
+                                <td class="num">@(member.Status is null ? "ingen status" : Format.Kr(member.YearTarget))</td>
+                                <td class="num">@Format.Kr(member.YearCollected)</td>
+                                <td></td>
+                            </tr>
+                        }
+                    }
+                }
+                <tr class="total">
+                    <td>@report.Total.Name</td>
+                    <td class="num">@Format.Kr(report.Total.MonthTarget)</td>
+                    <td class="num">@Format.Kr(report.Total.MonthCollected)</td>
+                    <td class="num"><Pct Value="report.Total.MonthPercent" /></td>
+                    <td class="num">@Format.Kr(report.Total.AccumulatedTarget)</td>
+                    <td class="num">@Format.Kr(report.Total.AccumulatedCollected)</td>
+                    <td class="num"><Pct Value="report.Total.AccumulatedPercent" /></td>
+                    <td class="num">@Format.Kr(report.Total.YearTarget)</td>
+                    <td class="num">@Format.Kr(report.Total.YearCollected)</td>
+                    <td class="num"><Pct Value="report.Total.YearPercent" /></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <p class="muted small">Klikk på et lag for å se medlemmene. Innsamlet er alle registrerte bidrag (donasjoner og dugnad) i Contributions-API-et.</p>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "month")] public string? MonthParameter { get; set; }
+
+    private int year;
+    private int month;
+    private MonthlyTeamReport? report;
+    private string? error;
+    private readonly HashSet<string> expanded = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var today = Reports.Today;
+        (year, month) = DateOnly.TryParseExact($"{MonthParameter}-01", "yyyy-MM-dd", out var picked)
+            ? (picked.Year, picked.Month)
+            : (today.Year, today.Month);
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        report = null;
+        error = null;
+        try
+        {
+            report = await Reports.GetMonthlyAsync(year, month);
+        }
+        catch (Exception ex)
+        {
+            error = $"Klarte ikke å lage rapporten: {ex.Message}";
+        }
+    }
+
+    private void Move(int months)
+    {
+        var date = new DateOnly(year, month, 1).AddMonths(months);
+        Navigation.NavigateTo($"report?month={date:yyyy-MM}");
+    }
+
+    private void PickMonth(ChangeEventArgs e)
+    {
+        if (e.Value is string value && value.Length == 7)
+            Navigation.NavigateTo($"report?month={value}");
+    }
+
+    private void Toggle(string team)
+    {
+        if (!expanded.Remove(team))
+            expanded.Add(team);
+    }
+}

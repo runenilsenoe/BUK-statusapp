@@ -3,6 +3,7 @@ using BccCode.Platform;
 using BukStatus.Core.Bcc;
 using BukStatus.Core.Groups;
 using BukStatus.Core.Status;
+using BukStatus.Core.Teams;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,28 +13,36 @@ namespace BukStatus.Core;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers member statuses (<see cref="IMemberStatusService"/>) and groups (<see cref="GroupService"/>,
-    /// <see cref="GroupStatusService"/>). Shared by the website and the Telegram bot.
-    /// Groups are stored in SQLite (ConnectionStrings:BukStatus). Statuses come from the BCC Contributions API,
+    /// Registers member statuses (<see cref="IMemberStatusService"/>), contribution history, groups
+    /// (<see cref="GroupService"/>, <see cref="GroupStatusService"/>) and teams with their reports
+    /// (<see cref="TeamService"/>, <see cref="TeamReportService"/>). Shared by the website and the Telegram bot.
+    /// Groups and teams are stored in SQLite (ConnectionStrings:BukStatus). Statuses come from the BCC Contributions API,
     /// or from made-up data when BccApi:UseFakeData is true.
     /// </summary>
     public static IServiceCollection AddBukStatusCore(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddMemoryCache();
+        services.AddSingleton(TimeProvider.System);
 
         var bcc = configuration.GetSection(BccApiOptions.SectionName).Get<BccApiOptions>() ?? new BccApiOptions();
         if (bcc.UseFakeData)
+        {
             services.AddSingleton<IMemberStatusService, FakeMemberStatusService>();
+            services.AddSingleton<IContributionHistoryService, FakeContributionHistoryService>();
+        }
         else
         {
             services.AddBccContributionsApi(configuration);
             services.AddSingleton<IMemberStatusService, BccMemberStatusService>();
+            services.AddSingleton<IContributionHistoryService, BccContributionHistoryService>();
         }
 
         var connectionString = configuration.GetConnectionString("BukStatus") ?? "Data Source=bukstatus.db";
         services.AddDbContextFactory<BukStatusDbContext>(options => options.UseSqlite(connectionString));
         services.AddSingleton<GroupService>();
         services.AddSingleton<GroupStatusService>();
+        services.AddSingleton<TeamService>();
+        services.AddSingleton<TeamReportService>();
 
         return services;
     }

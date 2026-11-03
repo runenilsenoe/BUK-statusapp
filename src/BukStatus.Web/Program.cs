@@ -59,6 +59,7 @@ app.MapStaticAssets();
 app.MapHealthChecks("/healthz").AllowAnonymous();
 app.MapAccountEndpoints();
 app.MapGroupApi();
+app.MapTeamApi();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .RequireAuthorization(AuthSetup.Policy);

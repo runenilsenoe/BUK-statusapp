@@ -1,0 +1,159 @@
+@page "/teams/{TeamId:int}"
+@rendermode InteractiveServer
+@inject TeamService TeamService
+@inject NavigationManager Navigation
+
+<PageTitle>@(team?.Name ?? "Lag") · BUK Status</PageTitle>
+
+<p><a href="teams">← Alle lag</a></p>
+
+@if (notFound)
+{
+    <p>Fant ikke laget.</p>
+}
+else if (team is null)
+{
+    <p class="muted">Henter lag …</p>
+}
+else
+{
+    <div class="page-header">
+        <h1>@team.Name</h1>
+        <div class="actions">
+            @if (confirmDelete)
+            {
+                <button type="button" class="danger" @onclick="Delete">Bekreft sletting</button>
+                <button type="button" @onclick="() => confirmDelete = false">Avbryt</button>
+            }
+            else
+            {
+                <button type="button" @onclick="() => confirmDelete = true">Slett lag</button>
+            }
+        </div>
+    </div>
+
+    @if (error is not null)
+    {
+        <p class="alert">@error</p>
+    }
+
+    <form @onsubmit="Save">
+        <div class="form-grid">
+            <label>Navn <input @bind="name" maxlength="100" /></label>
+            <label>Lagleder <input @bind="leader" maxlength="200" /></label>
+            <label>Tillegg på målet (%) <input type="number" min="0" max="500" step="any" @bind="bonusPercent" /></label>
+        </div>
+        <p class="muted small">Lagets mål er summen av medlemmenes aksjonsmål pluss tillegget.</p>
+        <button type="submit" class="primary" disabled="@busy">Lagre</button>
+        @if (saved)
+        {
+            <span class="muted"> Lagret.</span>
+        }
+    </form>
+
+    <h2 style="margin-top: 2rem; margin-bottom: 0.75rem;">Medlemmer (@team.Members.Count)</h2>
+
+    <form class="inline-form add-member" @onsubmit="AddMember">
+        <input type="number" min="1" @bind="newPersonId" placeholder="Person-ID" aria-label="Person-ID" />
+        <input @bind="newDisplayName" placeholder="Navn (valgfritt)" aria-label="Navn" maxlength="200" />
+        <button type="submit" class="primary" disabled="@busy">Legg til</button>
+    </form>
+
+    @if (team.Members.Count == 0)
+    {
+        <p class="muted">Ingen på laget ennå.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Person</th><th class="num">Person-ID</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var member in team.Members.OrderBy(m => m.DisplayName ?? m.PersonId.ToString()))
+                    {
+                        <tr>
+                            <td>@(member.DisplayName ?? $"Person {member.PersonId}")</td>
+                            <td class="num">@member.PersonId</td>
+                            <td><button type="button" class="link" @onclick="() => RemoveMember(member.PersonId)">Fjern</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int TeamId { get; set; }
+
+    private Team? team;
+    private bool notFound;
+    private string? error;
+    private bool busy;
+    private bool saved;
+    private bool confirmDelete;
+
+    private string name = "";
+    private string? leader;
+    private decimal bonusPercent;
+
+    private int? newPersonId;
+    private string? newDisplayName;
+
+    protected override async Task OnParametersSetAsync() => await Load(resetForm: true);
+
+    private async Task Load(bool resetForm)
+    {
+        team = await TeamService.GetAsync(TeamId);
+        notFound = team is null;
+        if (team is not null && resetForm)
+        {
+            name = team.Name;
+            leader = team.LeaderName;
+            bonusPercent = Math.Round(team.BonusPercent * 100, 2);
+        }
+    }
+
+    private Task Save() => Run(async () =>
+    {
+        await TeamService.UpdateAsync(TeamId, name, leader, bonusPercent / 100);
+        saved = true;
+    });
+
+    private Task AddMember() => Run(async () =>
+    {
+        if (newPersonId is not { } personId)
+            throw new GroupException("Fyll inn person-ID.");
+        await TeamService.AddMemberAsync(TeamId, personId, newDisplayName);
+        newPersonId = null;
+        newDisplayName = null;
+    });
+
+    private Task RemoveMember(int personId) => Run(() => TeamService.RemoveMemberAsync(TeamId, personId));
+
+    private async Task Delete()
+    {
+        await TeamService.DeleteAsync(TeamId);
+        Navigation.NavigateTo("teams");
+    }
+
+    private async Task Run(Func<Task> action)
+    {
+        busy = true;
+        error = null;
+        saved = false;
+        try
+        {
+            await action();
+            await Load(resetForm: false);
+        }
+        catch (GroupException ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

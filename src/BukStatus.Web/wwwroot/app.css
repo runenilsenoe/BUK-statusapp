@@ -188,3 +188,29 @@ tbody tr:last-child td { border-bottom: none; }
     .figures { grid-template-columns: 1fr 1fr; }
     .add-member input { flex: 1 1 8rem; }
 }
+
+.nav { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
+.nav nav { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+.nav nav a { color: var(--muted); text-decoration: none; padding: 0.3rem 0.6rem; border-radius: 6px; font-size: 0.92rem; }
+.nav nav a:hover { color: var(--text); }
+.nav nav a.active { color: var(--text); background: var(--track); }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+.notice { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--behind); border-radius: 6px; padding: 0.6rem 0.9rem; }
+.pct.good { color: var(--good); font-weight: 600; }
+.pct.behind { color: var(--behind); font-weight: 600; }
+tr.total td { font-weight: 700; border-top: 2px solid var(--border); }
+tr.team-row { cursor: pointer; }
+tr.team-row:hover td { background: var(--track); }
+tr.member-row td { font-size: 0.88rem; color: var(--muted); }
+th.group { text-align: center; border-bottom: none; }
+td.week-cell { text-align: right; font-variant-numeric: tabular-nums; }
+td.week-cell .sub { display: block; font-size: 0.75rem; color: var(--muted); }
+td.week-cell.good { background: var(--good-bg); }
+td.week-cell.behind { background: var(--behind-bg); }
+textarea { font: inherit; width: 100%; min-height: 14rem; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
+.targets { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.75rem; max-width: 760px; }
+.targets label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--muted); }
+.targets input { width: 100%; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; max-width: 760px; margin-bottom: 1rem; }
+.form-grid label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--muted); }

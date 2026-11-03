@@ -1,0 +1,97 @@
+@page "/report/weeks"
+@rendermode InteractiveServer
+@inject TeamReportService Reports
+@inject NavigationManager Navigation
+
+<PageTitle>Ukerapport · BUK Status</PageTitle>
+
+<div class="page-header">
+    <h1>Ukerapport @year</h1>
+    <div class="actions">
+        <button type="button" @onclick="() => GoToYear(year - 1)">← @(year - 1)</button>
+        <button type="button" @onclick="() => GoToYear(year + 1)">@(year + 1) →</button>
+    </div>
+</div>
+
+@if (error is not null)
+{
+    <p class="alert">@error</p>
+}
+
+@if (report is null)
+{
+    <p class="muted">Henter bidrag for alle lag …</p>
+}
+else if (report.Teams.Count == 0)
+{
+    <div class="empty"><p>Ingen lag ennå.</p><p class="muted"><a href="teams">Opprett lag</a> først.</p></div>
+}
+else if (report.LastWeek == 0)
+{
+    <p class="muted">@year har ikke startet ennå.</p>
+}
+else
+{
+    <p class="muted">
+        Ukebudsjettet er lagets årsmål delt på @report.WeeksInYear uker. Hver celle viser innsamlet den uka; grønn betyr
+        over ukebudsjettet. Linjen under er akkumulert innsamlet i prosent av akkumulert budsjett.
+    </p>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Uke</th>
+                    @foreach (var team in Columns)
+                    {
+                        <th class="num">@team.Name<br /><span class="muted small">@Format.Kr(team.WeeklyBudget)/uke</span></th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @for (var week = report.LastWeek; week >= 1; week--)
+                {
+                    var w = week;
+                    <tr>
+                        <td>Uke @w.ToString("00")</td>
+                        @foreach (var team in Columns)
+                        {
+                            var collected = team.Collected[w - 1];
+                            var accumulatedPercent = team.AccumulatedBudget(w) > 0 ? team.AccumulatedCollected(w) / team.AccumulatedBudget(w) * 100 : 0;
+                            <td class="week-cell @(team.WeeklyBudget <= 0 ? "" : collected >= team.WeeklyBudget ? "good" : "behind")">
+                                @Format.Kr(collected)
+                                <span class="sub">akk. @Format.Pct(accumulatedPercent)</span>
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "year")] public int? YearParameter { get; set; }
+
+    private int year;
+    private WeeklyTeamReport? report;
+    private string? error;
+
+    private IEnumerable<TeamWeekRow> Columns => report is null ? [] : report.Teams.Append(report.Total);
+
+    private void GoToYear(int target) => Navigation.NavigateTo($"report/weeks?year={target}");
+
+    protected override async Task OnParametersSetAsync()
+    {
+        year = YearParameter ?? Reports.Today.Year;
+        report = null;
+        error = null;
+        try
+        {
+            report = await Reports.GetWeeklyAsync(year);
+        }
+        catch (Exception ex)
+        {
+            error = $"Klarte ikke å lage rapporten: {ex.Message}";
+        }
+    }
+}

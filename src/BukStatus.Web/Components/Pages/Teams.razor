@@ -1,0 +1,88 @@
+@page "/teams"
+@rendermode InteractiveServer
+@inject TeamService TeamService
+@inject NavigationManager Navigation
+
+<PageTitle>Lag · BUK Status</PageTitle>
+
+<div class="page-header">
+    <h1>Lag</h1>
+    <div class="actions">
+        <form class="inline-form" @onsubmit="Create">
+            <input @bind="newName" placeholder="Navn på nytt lag" aria-label="Navn på nytt lag" maxlength="100" />
+            <button type="submit" class="primary" disabled="@busy">Opprett lag</button>
+        </form>
+        <a href="teams/import"><button type="button">Importer fra regneark</button></a>
+    </div>
+</div>
+
+@if (error is not null)
+{
+    <p class="alert">@error</p>
+}
+
+@if (teams is null)
+{
+    <p class="muted">Henter lag …</p>
+}
+else if (teams.Count == 0)
+{
+    <div class="empty">
+        <p>Ingen lag ennå.</p>
+        <p class="muted">Opprett lagene ett for ett, eller lim inn lagordningen fra regnearket under «Importer fra regneark».</p>
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Lag</th>
+                    <th>Lagleder</th>
+                    <th class="num">Tillegg</th>
+                    <th class="num">Medlemmer</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var team in teams)
+                {
+                    <tr class="team-row" @onclick="@(() => Navigation.NavigateTo($"teams/{team.Id}"))">
+                        <td><a href="@($"teams/{team.Id}")">@team.Name</a></td>
+                        <td>@(team.LeaderName ?? "–")</td>
+                        <td class="num">@Format.Pct(team.BonusPercent * 100)</td>
+                        <td class="num">@team.Members.Count</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<Team>? teams;
+    private string newName = "";
+    private string? error;
+    private bool busy;
+
+    protected override async Task OnInitializedAsync() => teams = await TeamService.GetAllAsync();
+
+    private async Task Create()
+    {
+        busy = true;
+        error = null;
+        try
+        {
+            var team = await TeamService.CreateAsync(newName);
+            Navigation.NavigateTo($"teams/{team.Id}");
+        }
+        catch (GroupException ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

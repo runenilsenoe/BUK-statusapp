@@ -1,0 +1,6 @@
+<span class="pct @(Value >= 100 ? "good" : "behind")">@Format.Pct(Value)</span>
+
+@code {
+    /// <summary>Percent of target (100 = on target).</summary>
+    [Parameter] public decimal Value { get; set; }
+}

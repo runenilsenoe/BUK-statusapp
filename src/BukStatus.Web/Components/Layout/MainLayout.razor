@@ -1,7 +1,20 @@
 ﻿@inherits LayoutComponentBase
 
 <header class="topbar">
-    <a href="/" class="brand">BUK Status</a>
+    <div class="nav">
+        <a href="/" class="brand">BUK Status</a>
+        <AuthorizeView>
+            <Authorized>
+                <nav>
+                    <NavLink href="/" Match="NavLinkMatch.All">Grupper</NavLink>
+                    <NavLink href="teams">Lag</NavLink>
+                    <NavLink href="report" Match="NavLinkMatch.All">Månedsrapport</NavLink>
+                    <NavLink href="report/weeks">Ukerapport</NavLink>
+                    <NavLink href="settings/targets">Månedsmål</NavLink>
+                </nav>
+            </Authorized>
+        </AuthorizeView>
+    </div>
     <AuthorizeView>
         <Authorized>
             <div class="user">

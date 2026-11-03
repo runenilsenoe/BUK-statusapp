@@ -1,0 +1,103 @@
+@page "/settings/targets"
+@rendermode InteractiveServer
+@inject TeamService TeamService
+@inject TeamReportService Reports
+
+<PageTitle>Månedsmål · BUK Status</PageTitle>
+
+<div class="page-header">
+    <h1>Månedsmål @year</h1>
+    <div class="actions">
+        <button type="button" @onclick="() => ChangeYear(-1)">← @(year - 1)</button>
+        <button type="button" @onclick="() => ChangeYear(1)">@(year + 1) →</button>
+    </div>
+</div>
+
+<p class="muted" style="max-width: 760px;">
+    Hvor stor andel av årsmålet som skal være nådd ved utgangen av hver måned, akkumulert. Månedsmålet i rapporten er
+    økningen fra forrige måned.
+</p>
+
+@if (error is not null)
+{
+    <p class="alert">@error</p>
+}
+
+<form @onsubmit="Save">
+    <div class="targets">
+        @for (var m = 1; m <= 12; m++)
+        {
+            var month = m;
+            <label>
+                @Format.MonthName(month)
+                <input type="number" min="0" max="100" step="any" @bind="percents[month - 1]" aria-label="@($"Mål % {Format.MonthName(month)}")" />
+            </label>
+        }
+    </div>
+    <div class="toolbar" style="margin-top: 1rem;">
+        <button type="submit" class="primary" disabled="@busy">Lagre</button>
+        <button type="button" @onclick="FillEvenly">Fordel jevnt</button>
+        @if (saved)
+        {
+            <span class="muted">Lagret.</span>
+        }
+    </div>
+</form>
+
+@code {
+    private int year;
+    private readonly decimal?[] percents = new decimal?[12];
+    private string? error;
+    private bool busy;
+    private bool saved;
+
+    protected override async Task OnInitializedAsync()
+    {
+        year = Reports.Today.Year;
+        await Load();
+    }
+
+    private async Task ChangeYear(int delta)
+    {
+        year += delta;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        error = null;
+        saved = false;
+        var targets = await TeamService.GetMonthlyTargetsAsync(year);
+        for (var m = 1; m <= 12; m++)
+            percents[m - 1] = targets.TryGetValue(m, out var value) ? Math.Round(value * 100, 2) : null;
+    }
+
+    private void FillEvenly()
+    {
+        for (var m = 1; m <= 12; m++)
+            percents[m - 1] = Math.Round(m * 100m / 12, 2);
+    }
+
+    private async Task Save()
+    {
+        busy = true;
+        error = null;
+        saved = false;
+        try
+        {
+            if (percents.Any(p => p is null))
+                throw new GroupException("Fyll inn alle tolv månedene.");
+            await TeamService.SaveMonthlyTargetsAsync(year,
+                Enumerable.Range(1, 12).ToDictionary(m => m, m => percents[m - 1]!.Value / 100));
+            saved = true;
+        }
+        catch (GroupException ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}
