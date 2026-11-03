@@ -1,0 +1,74 @@
+@using System.Globalization
+
+<div style="
+    position: relative;
+    width:@($"{Data.Length * BarWidthPx}px");
+    height:@($"{BarHeightPx}px");
+    box-sizing: border-box;">
+
+    <div style="
+        position: absolute;
+        bottom:@($"{BarHeightPx * (double)Globals.OnTrackProsentDesimal}px");
+        left: 0;
+        width: 100%;
+        height: 6px;         
+        background-color: #939292;
+        border-bottom: 2px solid #201f1f;
+        opacity: 0.9;
+        z-index: 999;">
+    </div>
+
+    <div style="
+        position: absolute;
+        bottom:calc(@($"{BarHeightPx * (double)Globals.OnTrackProsentDesimal}px") + 8px);
+        left:10px;
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: white;
+        z-index: 999;">73%
+    </div>
+    <div class="stacked-bar-chart">
+        @foreach (var item in Data)
+        {
+            decimal boostedPercent = item.PercentageWithBoost - item.ActualStatusPercentage;
+
+            var totalPercent = item.ActualStatusPercentage + boostedPercent;
+            bool isOverThirtyThree = totalPercent >= Globals.OnTrackProsent;
+
+            var totalHeight = BarHeightPx;
+            var bottomHeightPx = item.ActualStatusPercentage / (decimal)100.0 * (decimal)totalHeight;
+            var topHeightPx = boostedPercent / (decimal)100.0 * (decimal)totalHeight;
+
+            <div class="bar-container">
+                <div class="stacked-bar" style="height:@($"{BarHeightPx}px"); width:@($"{BarWidthPx}px")">
+                    @if (isOverThirtyThree)
+                    {
+                        <div style="
+                            position: absolute; 
+                            top: 5px;  
+                            font-size: 1.2rem;">
+                            ✅
+                        </div>
+                    }
+                    else
+                    {
+                        <div style="
+                            position: absolute; 
+                            top: 5px; 
+                            font-size: 1.2rem;">
+                            ❌
+                        </div>
+                    }
+                    <div class="bottom-portion"
+                         style="height:@($"{bottomHeightPx.ToString("0.##", CultureInfo.InvariantCulture)}px");bottom:0px;">
+                    </div>
+
+                    <div class="top-portion"
+                         style="height:@($"{topHeightPx.ToString("0.##", CultureInfo.InvariantCulture)}px"); bottom:@($"{bottomHeightPx.ToString("0.##", CultureInfo.InvariantCulture)}px");">
+                    </div>
+                    
+                </div>
+            </div>
+        }
+    </div>
+</div>

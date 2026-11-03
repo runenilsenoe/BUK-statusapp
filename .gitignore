@@ -1,0 +1,16 @@
+bin/
+obj/
+.idea/
+.vs/
+*.user
+.DS_Store
+*.db
+*.db-shm
+*.db-wal
+
+# Old apps keep personal myshare bearer tokens here
+PACEFEST/appsettings.Development.json
+MyBlazorProgressApp/appsettings.Development.json
+
+# Local Claude Code settings
+.claude/

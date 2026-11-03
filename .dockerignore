@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+**/.idea/
+**/.vs/
+**/*.user
+**/.DS_Store
+**/*.db
+**/*.db-shm
+**/*.db-wal
+.claude/
+.git/
+MyBlazorProgressApp/
+PACEFEST/
+tests/
+tools/

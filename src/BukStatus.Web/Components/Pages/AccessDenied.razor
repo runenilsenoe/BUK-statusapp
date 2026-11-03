@@ -1,0 +1,39 @@
+@page "/access-denied"
+@attribute [AllowAnonymous]
+@using System.Security.Claims
+@using BukStatus.Web.Auth
+
+<PageTitle>Ingen tilgang · BUK Status</PageTitle>
+
+<h1>Ingen tilgang</h1>
+
+@if (personId is not null)
+{
+    <p>Du er logget inn som <strong>@name</strong> (person-ID @personId), men har ikke tilgang til BUK Status.</p>
+    <p class="muted">Be en administrator legge til person-ID-en din i Auth:AllowedPersonIds.</p>
+}
+else
+{
+    <p>Du har ikke tilgang til denne siden.</p>
+}
+
+<form method="post" action="account/logout">
+    <AntiforgeryToken />
+    <button type="submit">Logg ut</button>
+</form>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private int? personId;
+    private string? name;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is null)
+            return;
+        var user = (await AuthState).User;
+        personId = user.PersonId();
+        name = user.Identity?.Name ?? user.FindFirst(ClaimTypes.Email)?.Value;
+    }
+}

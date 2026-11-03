@@ -1,0 +1,174 @@
+﻿@page "/"
+@using MyBlazorProgressApp.Services
+@inject MyshareService ProgressService
+
+<h3>Simulere pott</h3>
+
+<input type="range" min="0" max="80000" step="100"
+       @bind="SelectedAmount"
+       @onmouseup="OnSliderReleased"
+       class="slider" />
+
+<p>Selected Amount: @_selectedAmount NOK</p>
+
+<div>
+    <button class="btn btn-primary" @onclick="LoadData">Load</button>
+</div>
+
+@if (!ProgressService.IsTargetsLoaded)
+{
+    <p class="text-muted">Data not loaded yet.</p>
+}
+else
+{
+    <p class="text-muted"> </p>
+}
+
+<div style="display: flex; align-items: center; gap: 10px;">
+    <h1 style="margin: 0;">BUK</h1>
+    <img src="images/PACE_Coin_Buk_100_Spin_540px.gif" alt="Loading..." width="50" height="50" />
+</div>
+<!-- Bootstrap progress bar -->
+<div class="progress" style="width: 1000px; height: 60px; margin-top:15px;">
+    <div class="progress-bar bg-primary"
+         role="progressbar"
+         style="width:@ProgressService.CurrentProgress%; background-color: coral;"
+         aria-valuenow="@ProgressService.CurrentProgress"
+         aria-valuemin="0"
+         aria-valuemax="100">
+        @ProgressService.CurrentProgress%
+    </div>
+    <div class="progress-bar bg-success"
+         role="progressbar"
+         style="width:@ProgressService.ExtraProgress%;"
+         aria-valuenow="@ProgressService.ExtraProgress"
+         aria-valuemin="0"
+         aria-valuemax="100">
+        +@ProgressService.ExtraProgress%
+    </div>
+</div>
+
+<div style="display: flex; align-items: center; gap: 10px;">
+    <h1 style="margin: 0;">Samvirk</h1>
+    <img src="images/PACE_Coin_Samvirk_100_Spin_540px.gif" alt="Loading..." width="50" height="50" />
+</div>
+<!-- Bootstrap progress bar -->
+<div class="progress" style="width: 1000px; height: 30px; margin-top:15px;">
+    <div class="progress-bar"
+         role="progressbar"
+         style="width:@_samvirkProsent%;background-color: coral;"
+         aria-valuenow="@_samvirkProsent"
+         aria-valuemin="0"
+         aria-valuemax="100">
+        @_samvirkProsent%
+    </div>
+</div>
+@code {
+    private List<int> thresholds = new() { 70, 75 };
+}
+<h1>PACE</h1>
+<div style="width:1000px; margin-top:15px; position: relative;">
+    <div class="progress" style="height: 30px; width: 100%;">
+        <div class="progress-bar"
+             role="progressbar"
+             style="width:@Samlet%; background-color: grey;"
+             aria-valuenow="@Samlet"
+             aria-valuemin="0"
+             aria-valuemax="100">
+            @Samlet%
+        </div>
+    </div>
+
+    @foreach (var threshold in new int[] { 70, 75})
+    {
+        <div class="marker"
+             style="left:@($"{threshold}%")"
+             data-hit="@((Samlet >= threshold) ? "true" : "false")">
+            @threshold%
+        </div>
+    }
+</div>
+
+<style>
+    .marker {
+        position: absolute;
+        bottom: 40px; /* Adjust so marker is above the bar */
+        transform: translateX(-50%);
+        background-color: rgba(255, 0, 0, 0.8);
+        color: #fff;
+        padding: 4px 6px;
+        font-size: 12px;
+        font-weight: bold;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.8);
+        transition: all 0.3s ease-in-out;
+    }
+
+    .marker::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 6px solid rgba(255, 0, 0, 0.8);
+        transform: translateX(-50%);
+    }
+
+    /* If data-hit is 'true', highlight the marker in gold */
+    .marker[data-hit="true"] {
+        background-color: gold;
+        color: black;
+        border: 1px solid black;
+        box-shadow: 0px 0px 6px rgba(255, 215, 0, 0.9);
+    }
+    .marker[data-hit="true"]::after {
+        border-top-color: gold;
+    }
+</style>
+<p>Mangler for 100% : @_totalMissing NOK</p>
+@code {
+    private Timer? _autoLoadTimer; 
+    private int _selectedAmount = 0; // Default value
+    private decimal? _totalMissing = 0; // Default value
+    private readonly int _samvirkProsent = 72;
+    private int Samlet => (_samvirkProsent + ProgressService.CurrentProgress + ProgressService.ExtraProgress) / 2;
+
+    private int SelectedAmount
+    {
+        get => _selectedAmount;
+        set
+        {
+            _selectedAmount = value;
+            StateHasChanged(); // Ensures UI updates immediately
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _autoLoadTimer = new Timer(TimerCallback, null, TimeSpan.Zero, TimeSpan.FromSeconds(20));
+        await base.OnInitializedAsync();
+    }
+
+    private void TimerCallback(object? state)
+    {
+        Task.Run(() => InvokeAsync(async () =>
+        {
+            await LoadData();
+            StateHasChanged();
+        }));
+    }
+    private async Task OnSliderReleased()
+    {
+        await Task.Delay(10);
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        await ProgressService.LoadTargets();
+        _totalMissing = await ProgressService.GetMissingFromStatuses(SelectedAmount);
+        var contributionsExtra = await ProgressService.GetContributionsOutsideTargets();
+        StateHasChanged();
+    }
+}

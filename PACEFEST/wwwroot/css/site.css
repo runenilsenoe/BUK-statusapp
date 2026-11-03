@@ -1,0 +1,154 @@
+@import url('open-iconic/font/css/open-iconic-bootstrap.min.css');
+
+/* General dark background */
+html, body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background-color: rgba(30, 26, 26, 0.93);
+    color: #e0e0e0;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+    color: #ffffff;
+}
+
+/* Links */
+a, .btn-link {
+    color: #4da8da; /* Lighter blue for visibility */
+}
+
+/* Input focus styles */
+h1:focus, a:focus, button:focus, input:focus {
+    outline: none;
+}
+
+/* Buttons */
+.btn-primary {
+    color: #fff;
+    background-color: #3b82f6; /* Vibrant blue */
+    border-color: #2563eb;
+}
+
+.btn-danger {
+    background-color: #dc3545;
+    border-color: #b02a37;
+}
+
+.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
+    box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+}
+
+/* Content spacing */
+.content {
+    padding-top: 1.1rem;
+}
+
+/* Validation styles */
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid #26b050;
+}
+
+.invalid {
+    outline: 1px solid red;
+}
+
+.validation-message {
+    color: #ff5555;
+}
+
+/* Progress Bar */
+.progress {
+    background-color: #222; /* Darker background */
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.progress-bar {
+    color: white !important;
+    font-weight: bold;
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+/* Primary progress bar color */
+.progress-bar-primary {
+    background-color: #1e88e5 !important;
+}
+
+/* Secondary progress bar color */
+.progress-bar-secondary {
+    background-color: #43a047 !important;
+}
+
+/* Blazor Error UI */
+#blazor-error-ui {
+    background: #b32121;
+    color: white;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(255, 255, 255, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+/* Error dismiss button */
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}
+
+/* Error Boundary */
+.blazor-error-boundary {
+    background: #b32121;
+    padding: 1rem;
+    color: white;
+}
+
+.blazor-error-boundary::after {
+    content: "An error has occurred.";
+}
+
+.stacked-bar-chart {
+    display: flex;
+    gap: 0; /* spacing between bars */
+    align-items: flex-end; /* align containers by bottom if desired */
+    background-color: #201c1c;
+}
+
+.bar-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.bar-label {
+    margin-bottom: 4px;
+    font-size: 0.9rem;
+    color: #e60000;
+}
+
+.stacked-bar {
+    position: relative;
+    background-color: #080c0c;
+    border: 1px solid black;
+    display: flex;
+    width: 400px;
+}
+
+.bottom-portion {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background-color: #eddb6c;
+}
+
+.top-portion {
+    position: absolute;
+    width: 100%;
+    background-color: darkolivegreen;
+}

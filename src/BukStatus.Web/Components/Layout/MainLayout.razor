@@ -1,0 +1,26 @@
+﻿@inherits LayoutComponentBase
+
+<header class="topbar">
+    <a href="/" class="brand">BUK Status</a>
+    <AuthorizeView>
+        <Authorized>
+            <div class="user">
+                <span class="muted">@context.User.Identity?.Name</span>
+                <form method="post" action="account/logout">
+                    <AntiforgeryToken />
+                    <button type="submit" class="link">Logg ut</button>
+                </form>
+            </div>
+        </Authorized>
+    </AuthorizeView>
+</header>
+
+<main class="page">
+    @Body
+</main>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Det oppstod en feil.
+    <a href="." class="reload">Last inn på nytt</a>
+    <span class="dismiss">🗙</span>
+</div>

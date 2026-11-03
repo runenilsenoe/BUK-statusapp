@@ -1,0 +1,10 @@
+<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Clamped.ToString("0", System.Globalization.CultureInfo.InvariantCulture)">
+    <div class="progress-fill @(Good ? "good" : "behind")" style="width: @Clamped.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+</div>
+
+@code {
+    [Parameter] public decimal Percent { get; set; }
+    [Parameter] public bool Good { get; set; }
+
+    private decimal Clamped => Math.Clamp(Percent, 0, 100);
+}

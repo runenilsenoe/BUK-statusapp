@@ -1,0 +1,105 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@inject GroupService Groups
+@inject GroupStatusService GroupStatuses
+@inject NavigationManager Navigation
+
+<PageTitle>Grupper · BUK Status</PageTitle>
+
+<div class="page-header">
+    <h1>Grupper</h1>
+    <form class="inline-form" @onsubmit="CreateGroup">
+        <input @bind="newGroupName" placeholder="Navn på ny gruppe" aria-label="Navn på ny gruppe" maxlength="100" />
+        <button type="submit" class="primary" disabled="@busy">Opprett gruppe</button>
+    </form>
+</div>
+
+@if (error is not null)
+{
+    <p class="alert">@error</p>
+}
+
+@if (groups is null)
+{
+    <p class="muted">Henter status …</p>
+}
+else if (groups.Count == 0)
+{
+    <div class="empty">
+        <p>Ingen grupper ennå.</p>
+        <p class="muted">Opprett en gruppe og legg til personer med person-ID for å se statusen deres samlet.</p>
+    </div>
+}
+else
+{
+    <div class="cards">
+        @foreach (var group in groups)
+        {
+            <a class="card" href="@($"groups/{group.GroupId}")">
+                <div class="card-head">
+                    <h2>@group.Name</h2>
+                    <span class="muted">@group.MemberCount @(group.MemberCount == 1 ? "person" : "personer")</span>
+                </div>
+
+                @if (group.MembersWithStatus == 0)
+                {
+                    <p class="muted">Ingen status ennå</p>
+                }
+                else
+                {
+                    <div class="stat-row">
+                        <span class="big">@group.OnTrackCount / @group.MembersWithStatus</span>
+                        <span class="muted">ajour (@group.OnTrackPercent.ToString("0") %)</span>
+                    </div>
+                    <ProgressBar Percent="group.OnTrackPercent" Good="group.OnTrackCount == group.MembersWithStatus" />
+                    <dl class="figures">
+                        <div><dt>Bidratt</dt><dd>@Format.Kr(group.TotalContribution)</dd></div>
+                        <div><dt>Mål</dt><dd>@Format.Kr(group.TotalTarget)</dd></div>
+                        <div><dt>Mangler for ajour</dt><dd>@Format.Kr(group.RemainingForAllOnTrack)</dd></div>
+                    </dl>
+                }
+            </a>
+        }
+    </div>
+}
+
+@code {
+    private List<GroupStatus>? groups;
+    private string newGroupName = "";
+    private string? error;
+    private bool busy;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            groups = await GroupStatuses.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            groups = [];
+            error = $"Klarte ikke å hente status: {ex.Message}";
+        }
+    }
+
+    private async Task CreateGroup()
+    {
+        busy = true;
+        error = null;
+        try
+        {
+            var group = await Groups.CreateAsync(newGroupName);
+            Navigation.NavigateTo($"groups/{group.Id}");
+        }
+        catch (GroupException ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

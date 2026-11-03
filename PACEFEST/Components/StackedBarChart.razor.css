@@ -1,0 +1,39 @@
+.stacked-bar-chart {
+    display: flex;
+    gap: 1rem; /* spacing between bars */
+    align-items: flex-end; /* align containers by bottom if desired */
+    background-color: #0a58ca;
+}
+
+.bar-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.bar-label {
+    margin-bottom: 4px;
+    font-size: 0.9rem;
+    color: #e60000;
+}
+
+.stacked-bar {
+    position: relative;
+    background-color: rgb(240, 240, 240);
+    border: 1px solid #ccc;
+    display: flex;
+    width: 400px;
+}
+
+.bottom-portion {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background-color: #0aef0a;
+}
+
+.top-portion {
+    position: absolute;
+    width: 100%;
+    background-color: tomato;
+}

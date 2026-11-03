@@ -1,0 +1,62 @@
+﻿@page "/"
+@using PACEFEST.Components
+@using PACEFEST.Services
+@using BlazorBootstrap
+
+@inject MyshareService ProgressService
+
+<h3>Simulere pott</h3>
+
+<input type="range" min="0" max="200000" step="1000" width="1000"
+       @bind="@ProgressService.MockBonusContributed"
+       @onmouseup="OnSliderReleased"
+       class="slider" />
+
+<p>Selected Amount: @ProgressService.MockBonusContributed NOK</p>
+<InputNumber @bind-Value="ProgressService.MockBonusContributed"
+             Min="0"
+             Max="200000" />
+
+<div>
+    <button class="btn btn-primary" @onclick="() => LoadData(true)">Load</button>
+    <Switch @bind-Value="@MaximizeBoost" Label="Maximize Boost" />
+    <Switch @bind-Value="@EnableSound" Label="Lyd på" />
+</div>
+<StackedBarChart Data="@ProgressItems" BarHeightPx="500" BarWidthPx="20" />
+
+@if (ProgressService.ContributionsLoading || ProgressService.StatusesLoading || ProgressService.TargetsLoading)
+{
+    <Spinner Color="SpinnerColor.Primary" />
+}
+else
+{
+    <p class="text-muted"> </p>
+}
+<div style="display: flex; gap: 50px; ">
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <img src="images/PACE_Coin_Buk_100_Spin_540px.gif" alt="Loading..." width="50" height="50" />
+        <h3 style="margin: 0;">BUK</h3>
+        <h3 style="margin: 0;">@BUKStatus %</h3>
+
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <img src="images/PACE_Coin_Samvirk_100_Spin_540px.gif" alt="Loading..." width="50" height="50" />
+        <h3 style="margin: 0;">Samvirk</h3>
+        <h3 style="margin: 0;">@Globals.SamvirkProsent %</h3>
+    </div>
+</div>
+<p></p>
+<div style="display: flex; align-items: center; gap: 10px;">
+    <img src="images/PACE_Medal_01.png" alt="Loading..." width="50" height="50" />
+    <h1 style="margin: 0;">SØRLANDET </h1>
+    <h1 style="margin: 0;">@SØRLANDETStatus %</h1>
+    <h1 style="float: right; margin-left: 900px ;">Sorlandet.donationbuk.no</h1>
+</div>
+
+<p></p>
+<p>Totalt kommet inn i ekstrabidrag til nå: @ProgressService.BonusContributions NOK</p>
+<p>Mangler for 100% : @($"{_totalMissing:0.00}")NOK</p>
+<p>Antall bidragsplaner i BUK% : @($"{@ProgressService.TargetAmount}") personer</p>
+<p>Antall vi har klart å hente status for : @($"{@ProgressService.StatusAmount}") personer</p>
+<p>Antall ajour : @($"{@ProgressService.AjourAmount}") personer</p>

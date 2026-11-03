@@ -1,0 +1,196 @@
+@page "/groups/{GroupId:int}"
+@rendermode InteractiveServer
+@inject GroupService Groups
+@inject GroupStatusService GroupStatuses
+@inject NavigationManager Navigation
+
+<PageTitle>@(status?.Name ?? "Gruppe") · BUK Status</PageTitle>
+
+<p><a href="/">← Alle grupper</a></p>
+
+@if (notFound)
+{
+    <p>Fant ikke gruppen.</p>
+}
+else if (status is null)
+{
+    <p class="muted">Henter status …</p>
+}
+else
+{
+    <div class="page-header">
+        @if (renaming)
+        {
+            <form class="inline-form" @onsubmit="Rename">
+                <input @bind="newName" aria-label="Nytt navn" maxlength="100" />
+                <button type="submit" class="primary">Lagre</button>
+                <button type="button" @onclick="() => renaming = false">Avbryt</button>
+            </form>
+        }
+        else
+        {
+            <h1>@status.Name</h1>
+            <div class="actions">
+                <button type="button" @onclick="StartRename">Gi nytt navn</button>
+                @if (confirmDelete)
+                {
+                    <button type="button" class="danger" @onclick="Delete">Bekreft sletting</button>
+                    <button type="button" @onclick="() => confirmDelete = false">Avbryt</button>
+                }
+                else
+                {
+                    <button type="button" @onclick="() => confirmDelete = true">Slett gruppe</button>
+                }
+            </div>
+        }
+    </div>
+
+    @if (error is not null)
+    {
+        <p class="alert">@error</p>
+    }
+
+    @if (status.MembersWithStatus > 0)
+    {
+        <section class="summary">
+            <div><span class="big">@status.OnTrackCount / @status.MembersWithStatus</span><span class="muted">ajour (@status.OnTrackPercent.ToString("0") %)</span></div>
+            <div><span class="big">@Format.Kr(status.TotalContribution)</span><span class="muted">bidratt av @Format.Kr(status.TotalTarget) (@status.ProgressPercent.ToString("0") %)</span></div>
+            <div><span class="big">@Format.Kr(status.RemainingForAllOnTrack)</span><span class="muted">mangler for at alle skal være ajour</span></div>
+        </section>
+    }
+
+    <form class="inline-form add-member" @onsubmit="AddMember">
+        <input type="number" min="1" @bind="newPersonId" placeholder="Person-ID" aria-label="Person-ID" />
+        <input @bind="newDisplayName" placeholder="Navn (valgfritt)" aria-label="Navn" maxlength="200" />
+        <button type="submit" class="primary" disabled="@busy">Legg til</button>
+    </form>
+
+    @if (status.MemberCount == 0)
+    {
+        <p class="muted">Ingen personer i gruppen ennå.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Person</th>
+                        <th>Status</th>
+                        <th class="num">Bidratt</th>
+                        <th class="num">Ajour-mål</th>
+                        <th class="num">Mangler</th>
+                        <th>Fremdrift totalmål</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var member in status.Members)
+                    {
+                        <tr>
+                            <td>
+                                @(member.DisplayName ?? $"Person {member.PersonId}")
+                                @if (member.DisplayName is not null)
+                                {
+                                    <span class="muted small"> #@member.PersonId</span>
+                                }
+                            </td>
+                            @if (member.Status is { } s)
+                            {
+                                <td><span class="badge @(s.IsOnTrack ? "good" : "behind")">@(s.IsOnTrack ? "Ajour" : "Ikke ajour")</span></td>
+                                <td class="num">@Format.Kr(s.TotalContribution)</td>
+                                <td class="num">@Format.Kr(s.AjourTarget)</td>
+                                <td class="num">@(s.RemainingForOnTrack > 0 ? Format.Kr(s.RemainingForOnTrack) : "–")</td>
+                                <td><ProgressBar Percent="s.ProgressPercent" Good="s.IsOnTrack" /></td>
+                            }
+                            else
+                            {
+                                <td colspan="5" class="muted">Ingen status fra BCC</td>
+                            }
+                            <td><button type="button" class="link" @onclick="() => RemoveMember(member.PersonId)">Fjern</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int GroupId { get; set; }
+
+    private GroupStatus? status;
+    private bool notFound;
+    private string? error;
+    private bool busy;
+
+    private bool renaming;
+    private string newName = "";
+    private bool confirmDelete;
+
+    private int? newPersonId;
+    private string? newDisplayName;
+
+    protected override async Task OnParametersSetAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            status = await GroupStatuses.GetAsync(GroupId);
+            notFound = status is null;
+        }
+        catch (Exception ex)
+        {
+            error = $"Klarte ikke å hente status: {ex.Message}";
+        }
+    }
+
+    private void StartRename()
+    {
+        newName = status?.Name ?? "";
+        renaming = true;
+    }
+
+    private async Task Rename() => await Run(async () =>
+    {
+        await Groups.RenameAsync(GroupId, newName);
+        renaming = false;
+    });
+
+    private async Task Delete()
+    {
+        await Groups.DeleteAsync(GroupId);
+        Navigation.NavigateTo("/");
+    }
+
+    private async Task AddMember() => await Run(async () =>
+    {
+        if (newPersonId is not { } personId)
+            throw new GroupException("Fyll inn person-ID.");
+        await Groups.AddMemberAsync(GroupId, personId, newDisplayName);
+        newPersonId = null;
+        newDisplayName = null;
+    });
+
+    private async Task RemoveMember(int personId) => await Run(() => Groups.RemoveMemberAsync(GroupId, personId));
+
+    private async Task Run(Func<Task> action)
+    {
+        busy = true;
+        error = null;
+        try
+        {
+            await action();
+            await Load();
+        }
+        catch (GroupException ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

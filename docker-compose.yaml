@@ -1,0 +1,35 @@
+# Coolify: create the resource with the "Docker Compose" build pack pointing at this file.
+# Set the domain on the "web" service in Coolify (e.g. https://status.example.no); Coolify's proxy handles TLS.
+# The ${...} values show up under Environment Variables in Coolify. Those marked :? must be filled in.
+# Secrets go there, never in appsettings.json.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose:
+      - "8080"
+    volumes:
+      - bukstatus-data:/app/data
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+
+      # BCC Contributions API (OAuth client credentials).
+      BccApi__Environment: ${BCC_API_ENVIRONMENT:-prod}
+      BccApi__ClientId: ${BCC_API_CLIENT_ID:?}
+      BccApi__ClientSecret: ${BCC_API_CLIENT_SECRET:?}
+      # Set to true to run on made-up statuses until the API client exists.
+      BccApi__UseFakeData: ${BCC_API_USE_FAKE_DATA:-false}
+
+      # BCC login (OIDC). Callback URL to register with BCC: https://<domain>/signin-auth0
+      Auth__ClientId: ${AUTH_CLIENT_ID:?}
+      Auth__ClientSecret: ${AUTH_CLIENT_SECRET:?}
+      # Person ids allowed in. Add more as Auth__AllowedPersonIds__1, __2, ...
+      Auth__AllowedPersonIds__0: ${AUTH_ALLOWED_PERSON_ID_1:?}
+      # Key for the Telegram bot / scripts calling /api (header X-Api-Key). Generate with: openssl rand -hex 32
+      Auth__ApiKeys__0: ${API_KEY_BOT:-}
+
+volumes:
+  bukstatus-data:
