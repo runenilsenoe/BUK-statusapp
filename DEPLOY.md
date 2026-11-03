@@ -2,9 +2,11 @@
 
 Websiden (`src/BukStatus.Web`) kjøres som én container. Coolify bygger den fra [`docker-compose.yaml`](docker-compose.yaml) og [`Dockerfile`](Dockerfile), og Coolify sin proxy (Traefik) tar seg av HTTPS.
 
+**Slik kjører den i dag:** ressursen `buk-status-web` i prosjektet «BUK Telegram» (production) på https://buk.bttr.no. Kilden er GitHub-appen `simplrserver-app`, og Auto deploy står på «Deploy on push (webhooks)». Hver push til `main` ruller altså ut automatisk.
+
 ## 1. Legg koden i et Git-repo
 
-Coolify henter koden fra Git. Push prosjektet til et privat repo (GitHub, GitLab eller Gitea), og koble det til Coolify under **Sources**: GitHub App for GitHub, deploy key for andre.
+Coolify henter koden fra Git. Koble repoet til Coolify under **Sources**: GitHub App for GitHub (gir webhooks og automatisk utrulling ved push), deploy key for andre. Et offentlig repo kan også brukes uten app, men da må hver utrulling startes manuelt.
 
 ## 2. Opprett ressursen
 
