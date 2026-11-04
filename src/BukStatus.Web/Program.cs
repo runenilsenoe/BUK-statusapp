@@ -60,6 +60,7 @@ app.MapHealthChecks("/healthz").AllowAnonymous();
 app.MapAccountEndpoints();
 app.MapGroupApi();
 app.MapTeamApi();
+app.MapPotApi();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .RequireAuthorization(AuthSetup.Policy);

@@ -1,0 +1,89 @@
+@page "/settings/pot"
+@rendermode InteractiveServer
+@using BukStatus.Core.Pot
+@inject PotService PotService
+
+<PageTitle>Innstillinger for pott · BUK Status</PageTitle>
+
+<p><a href="pot">← Pott</a></p>
+
+<div class="page-header">
+    <h1>Innstillinger for pott</h1>
+</div>
+
+<p class="muted" style="max-width: 760px;">
+    Samvirk-prosenten og ekstrabidragene finnes ikke i BCC-API-et, så de legges inn her. Ekstrabidrag er penger
+    som har kommet inn utenom medlemmenes egne mål, for eksempel gaver fra personer uten bidragsplan. Potten fordeles
+    på dem som ikke er ajour.
+</p>
+
+@if (error is not null)
+{
+    <p class="alert">@error</p>
+}
+
+@if (settings is not null)
+{
+    <form @onsubmit="Save">
+        <div class="form-grid">
+            <label>
+                Overskrift for samlet score
+                <input @bind="settings.Title" maxlength="100" placeholder="f.eks. SØRLANDET" />
+            </label>
+            <label>
+                Undertekst (valgfritt)
+                <input @bind="settings.Subtitle" maxlength="200" placeholder="f.eks. sorlandet.donationbuk.no" />
+            </label>
+            <label>
+                Samvirk ajour (%)
+                <input type="number" min="0" max="100" step="any" @bind="settings.SamvirkPercent" />
+            </label>
+            <label>
+                Faktiske ekstrabidrag (kr)
+                <input type="number" min="0" step="any" @bind="settings.ExtraContributions" />
+            </label>
+            <label>
+                Mål for samlet score (%)
+                <input @bind="settings.Milestones" maxlength="100" placeholder="70;75" />
+            </label>
+        </div>
+        <div class="toolbar">
+            <button type="submit" class="primary" disabled="@busy">Lagre</button>
+            @if (saved)
+            {
+                <span class="muted">Lagret.</span>
+            }
+        </div>
+    </form>
+}
+
+@code {
+    private PotSettings? settings;
+    private string? error;
+    private bool busy;
+    private bool saved;
+
+    protected override async Task OnInitializedAsync() => settings = await PotService.GetSettingsAsync();
+
+    private async Task Save()
+    {
+        if (settings is null)
+            return;
+        busy = true;
+        error = null;
+        saved = false;
+        try
+        {
+            await PotService.SaveSettingsAsync(settings);
+            saved = true;
+        }
+        catch (GroupException ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

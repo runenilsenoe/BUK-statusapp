@@ -1,0 +1,294 @@
+@page "/pot"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@using BukStatus.Core.Pot
+@inject PotService PotService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject ILogger<Pot> Logger
+
+<PageTitle>Pott · BUK Status</PageTitle>
+
+<div class="pot @(bigScreen ? "pot-big" : "")">
+    <div class="page-header">
+        <h1>Pott@(screen is null ? "" : $": {screen.Source.Name}")</h1>
+        <div class="actions">
+            <select @bind="sourceKey" @bind:after="SourceChanged" aria-label="Hvem skjermen gjelder">
+                @foreach (var source in sources)
+                {
+                    <option value="@source.Key">@source.Name</option>
+                }
+            </select>
+            <button type="button" @onclick="ToggleBigScreen">@(bigScreen ? "Avslutt storskjerm" : "Storskjerm")</button>
+            @if (!bigScreen)
+            {
+                <a class="button" href="settings/pot">Innstillinger</a>
+            }
+        </div>
+    </div>
+
+    @if (error is not null)
+    {
+        <p class="alert">@error</p>
+    }
+
+    @if (!bigScreen)
+    {
+        <section class="pot-controls">
+            <label class="pot-slider">
+                <span>Simulere pott (i tillegg til faktiske ekstrabidrag)</span>
+                <input type="range" min="0" max="@SliderMax" step="@SliderStep" @bind="simulated" @bind:after="Load" />
+            </label>
+            <label>
+                <span>Simulert beløp</span>
+                <input type="number" min="0" step="100" @bind="simulated" @bind:after="Load" aria-label="Simulert beløp" />
+            </label>
+            <fieldset class="pot-strategy">
+                <legend>Fordeling</legend>
+                <label><input type="radio" name="strategy" checked="@(strategy == PotStrategy.Even)" @onchange="() => SetStrategy(PotStrategy.Even)" /> Likt på alle som ikke er ajour</label>
+                <label><input type="radio" name="strategy" checked="@(strategy == PotStrategy.MaximizeAjour)" @onchange="() => SetStrategy(PotStrategy.MaximizeAjour)" /> Flest mulig ajour</label>
+            </fieldset>
+            <label class="pot-check"><input type="checkbox" @bind="sound" /> Lyd når noen blir ajour</label>
+            <button type="button" @onclick="Load" disabled="@loading">Oppdater nå</button>
+        </section>
+    }
+
+    @if (screen is null)
+    {
+        <p class="muted">Henter status …</p>
+    }
+    else if (screen.Result.Count == 0)
+    {
+        <div class="empty">
+            <p>Ingen med status her ennå.</p>
+            <p class="muted">Legg personer inn i lag eller grupper, så vises de her.</p>
+        </div>
+    }
+    else
+    {
+        var result = screen.Result;
+        var settings = screen.Settings;
+        var combined = screen.CombinedPercent;
+
+        <section class="pot-scores">
+            <div class="pot-score">
+                <img src="pot/coin-buk.gif" alt="" width="56" height="56" />
+                <div>
+                    <span class="label">BUK</span>
+                    <span class="value">@Format.Pct(result.OnTrackWithPotPercent)</span>
+                    <span class="muted small">
+                        @result.OnTrackWithPotCount av @result.Count ajour
+                        @if (result.PotUsed > 0)
+                        {
+                            <text> · @Format.Pct(result.OnTrackPercent) uten pott</text>
+                        }
+                    </span>
+                </div>
+            </div>
+            <div class="pot-score">
+                <img src="pot/coin-samvirk.gif" alt="" width="56" height="56" />
+                <div>
+                    <span class="label">Samvirk</span>
+                    <span class="value">@Format.Pct(settings.SamvirkPercent)</span>
+                    <span class="muted small">Legges inn under innstillinger</span>
+                </div>
+            </div>
+            <div class="pot-score pot-combined">
+                <img src="pot/medal.png" alt="" width="56" height="56" />
+                <div>
+                    <span class="label">@settings.Title</span>
+                    <span class="value">@Format.Pct(combined)</span>
+                    <span class="muted small">@(settings.Subtitle ?? "Snittet av BUK og Samvirk")</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="pot-milestones" aria-label="Samlet mot målene">
+            <div class="pot-milestone-track">
+                <div class="pot-milestone-fill" style="width: @Css(Math.Clamp(combined, 0, 100))%"></div>
+                @foreach (var milestone in settings.MilestoneList)
+                {
+                    <div class="pot-milestone @(combined >= milestone ? "hit" : "")" style="left: @Css(milestone)%">
+                        <span>@Format.Pct(milestone)</span>
+                    </div>
+                }
+            </div>
+        </section>
+
+        <PotChart Members="result.Members" />
+        <p class="pot-legend muted small">
+            <span class="swatch behind"></span> Eget bidrag
+            <span class="swatch good"></span> Ajour
+            <span class="swatch pot"></span> Fra potten
+            · Hver stolpe er én person, målt mot ajour-målet sitt.
+        </p>
+
+        <dl class="pot-facts">
+            <div><dt>Faktiske ekstrabidrag</dt><dd>@Format.Kr(settings.ExtraContributions)</dd></div>
+            @if (screen.Simulated > 0)
+            {
+                <div><dt>Simulert i tillegg</dt><dd>@Format.Kr(screen.Simulated)</dd></div>
+            }
+            <div><dt>Brukt av potten</dt><dd>@Format.Kr(result.PotUsed)@(result.PotLeft > 0 ? $" ({Format.Kr(result.PotLeft)} til overs)" : "")</dd></div>
+            <div><dt>Mangler for at alle er ajour</dt><dd>@Format.Kr(result.RemainingForAllOnTrack)</dd></div>
+            <div><dt>Med status</dt><dd>@result.Count personer@(result.MembersWithoutStatus > 0 ? $" ({result.MembersWithoutStatus} uten status)" : "")</dd></div>
+            <div><dt>Oppdatert</dt><dd>@(lastLoaded?.ToString("HH:mm:ss") ?? "–")</dd></div>
+        </dl>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "kilde")] public string? Kilde { get; set; }
+
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(30);
+
+    private List<PotSource> sources = [];
+    private string sourceKey = PotSource.AllTeamsKey;
+    private PotScreen? screen;
+    private decimal simulated;
+    private PotStrategy strategy = PotStrategy.Even;
+    private bool sound;
+    private bool bigScreen;
+    private bool loading;
+    private string? error;
+    private DateTime? lastLoaded;
+
+    // Sound only plays when the ajour count goes up between refreshes of the same view, not when the slider moves.
+    private (string Source, decimal Simulated, PotStrategy Strategy)? previousView;
+    private int? previousAjourCount;
+
+    private PeriodicTimer? timer;
+    private CancellationTokenSource? cts;
+    private IJSObjectReference? module;
+
+    private decimal SliderMax => Math.Max(10_000, Math.Ceiling((screen?.Result.RemainingBeforePot ?? 0) / 10_000) * 10_000);
+    private decimal SliderStep => SliderMax > 200_000 ? 5_000 : 1_000;
+
+    protected override async Task OnInitializedAsync()
+    {
+        sourceKey = Kilde ?? PotSource.AllTeamsKey;
+        try
+        {
+            sources = await PotService.GetSourcesAsync();
+        }
+        catch (Exception ex)
+        {
+            error = $"Klarte ikke å hente lag og grupper: {ex.Message}";
+        }
+        await Load();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+            _ = AutoRefresh();
+    }
+
+    private async Task AutoRefresh()
+    {
+        cts = new CancellationTokenSource();
+        timer = new PeriodicTimer(RefreshInterval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cts.Token))
+                await InvokeAsync(Load);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task Load()
+    {
+        if (loading)
+            return;
+        loading = true;
+        try
+        {
+            simulated = Math.Max(0, simulated);
+            screen = await PotService.GetScreenAsync(sourceKey, simulated, strategy);
+            sourceKey = screen.Source.Key;
+            lastLoaded = DateTime.Now;
+            error = null;
+            await PlaySoundIfNewAjour(screen);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not load the pot screen");
+            error = $"Klarte ikke å hente status: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task PlaySoundIfNewAjour(PotScreen loaded)
+    {
+        var view = (loaded.Source.Key, loaded.Simulated, loaded.Result.Strategy);
+        var count = loaded.Result.OnTrackWithPotCount;
+        var sameView = previousView == view;
+        var more = previousAjourCount is { } before && count > before;
+        previousView = view;
+        previousAjourCount = count;
+
+        if (sound && sameView && more)
+        {
+            try
+            {
+                module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./pot/pot.js");
+                await module.InvokeVoidAsync("playSound", "pot/ny-ajour.mp3");
+            }
+            catch (JSException ex)
+            {
+                Logger.LogDebug(ex, "Could not play sound");
+            }
+        }
+    }
+
+    private async Task SourceChanged()
+    {
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("kilde", sourceKey), replace: true);
+        await Load();
+    }
+
+    private async Task SetStrategy(PotStrategy value)
+    {
+        strategy = value;
+        await Load();
+    }
+
+    private async Task ToggleBigScreen()
+    {
+        bigScreen = !bigScreen;
+        try
+        {
+            module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./pot/pot.js");
+            await module.InvokeVoidAsync("setFullscreen", bigScreen);
+        }
+        catch (JSException ex)
+        {
+            Logger.LogDebug(ex, "Could not toggle fullscreen");
+        }
+    }
+
+    private static string Css(decimal value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    public async ValueTask DisposeAsync()
+    {
+        cts?.Cancel();
+        timer?.Dispose();
+        cts?.Dispose();
+        if (module is not null)
+        {
+            try
+            {
+                await module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
+}

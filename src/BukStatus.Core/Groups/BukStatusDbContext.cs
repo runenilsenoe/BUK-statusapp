@@ -1,3 +1,4 @@
+using BukStatus.Core.Pot;
 using BukStatus.Core.Teams;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +11,7 @@ public class BukStatusDbContext(DbContextOptions<BukStatusDbContext> options) : 
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamMember> TeamMembers => Set<TeamMember>();
     public DbSet<MonthlyTarget> MonthlyTargets => Set<MonthlyTarget>();
+    public DbSet<PotSettings> PotSettings => Set<PotSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,6 +34,17 @@ public class BukStatusDbContext(DbContextOptions<BukStatusDbContext> options) : 
         {
             target.Property(t => t.CumulativePercent).HasPrecision(5, 4);
             target.HasIndex(t => new { t.Year, t.Month }).IsUnique();
+        });
+
+        modelBuilder.Entity<PotSettings>(settings =>
+        {
+            settings.Property(s => s.Id).ValueGeneratedNever();
+            settings.Property(s => s.Title).HasMaxLength(100);
+            settings.Property(s => s.Subtitle).HasMaxLength(200);
+            settings.Property(s => s.Milestones).HasMaxLength(100);
+            settings.Property(s => s.SamvirkPercent).HasPrecision(5, 2);
+            settings.Property(s => s.ExtraContributions).HasPrecision(18, 2);
+            settings.Ignore(s => s.MilestoneList);
         });
 
         modelBuilder.Entity<Group>(group =>
