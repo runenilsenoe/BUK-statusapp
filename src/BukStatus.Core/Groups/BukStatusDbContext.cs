@@ -44,7 +44,10 @@ public class BukStatusDbContext(DbContextOptions<BukStatusDbContext> options) : 
             settings.Property(s => s.Milestones).HasMaxLength(100);
             settings.Property(s => s.SamvirkPercent).HasPrecision(5, 2);
             settings.Property(s => s.ExtraContributions).HasPrecision(18, 2);
+            settings.Property(s => s.ExtraDescriptionFilter).HasMaxLength(200);
+            settings.Property(s => s.ExtraExcludedPersonIds).HasMaxLength(2000);
             settings.Ignore(s => s.MilestoneList);
+            settings.Ignore(s => s.ExcludedPersonIdList);
         });
 
         modelBuilder.Entity<Group>(group =>

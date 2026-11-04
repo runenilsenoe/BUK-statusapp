@@ -15,8 +15,9 @@ public record PotSource(string Key, string Name)
     public static string GroupKey(int groupId) => $"gruppe-{groupId.ToString(CultureInfo.InvariantCulture)}";
 }
 
+/// <param name="Extra">The real extra contributions and where they came from.</param>
 /// <param name="Simulated">The made-up amount added on top of the real extra contributions.</param>
-public record PotScreen(PotSource Source, PotSettings Settings, decimal Simulated, PotResult Result)
+public record PotScreen(PotSource Source, PotSettings Settings, ExtraContributionsResult Extra, decimal Simulated, PotResult Result)
 {
     public decimal CombinedPercent => Result.CombinedPercent(Settings.SamvirkPercent);
 }
@@ -26,8 +27,12 @@ public class PotService(
     IDbContextFactory<BukStatusDbContext> dbFactory,
     TeamService teams,
     GroupService groups,
-    IMemberStatusService statuses)
+    IMemberStatusService statuses,
+    ExtraContributionsService extraContributions,
+    TimeProvider time)
 {
+    public DateOnly Today => DateOnly.FromDateTime(time.GetLocalNow().DateTime);
+
     public async Task<PotSettings> GetSettingsAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -43,9 +48,17 @@ public class PotService(
         if (settings.ExtraContributions < 0)
             throw new GroupException("Ekstrabidrag kan ikke være negativt.");
 
-        var milestones = settings.Milestones.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var milestones = PotSettings.Split(settings.Milestones);
         if (milestones.Any(m => !decimal.TryParse(m, NumberStyles.Number, CultureInfo.InvariantCulture, out var v) || v is <= 0 or > 100))
             throw new GroupException("Målene må være tall mellom 1 og 100, skilt med semikolon (f.eks. 70;75).");
+
+        var excluded = PotSettings.Split(settings.ExtraExcludedPersonIds);
+        if (excluded.Any(v => !int.TryParse(v, NumberStyles.None, CultureInfo.InvariantCulture, out var id) || id <= 0))
+            throw new GroupException("Unntatte personer må være person-ID-er skilt med semikolon.");
+        if (settings.ExtraOrgId is <= 0)
+            throw new GroupException("Org-ID må være et positivt tall.");
+        if (settings.ExtraFrom is { } from && settings.ExtraTo is { } to && to < from)
+            throw new GroupException("Til-datoen kan ikke være før fra-datoen.");
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.PotSettings.FirstOrDefaultAsync(cancellationToken);
@@ -60,6 +73,12 @@ public class PotService(
         row.SamvirkPercent = settings.SamvirkPercent;
         row.ExtraContributions = settings.ExtraContributions;
         row.Milestones = string.Join(';', milestones);
+        row.ExtraMode = settings.ExtraMode;
+        row.ExtraOrgId = settings.ExtraOrgId;
+        row.ExtraDescriptionFilter = string.IsNullOrWhiteSpace(settings.ExtraDescriptionFilter) ? null : settings.ExtraDescriptionFilter.Trim();
+        row.ExtraFrom = settings.ExtraFrom;
+        row.ExtraTo = settings.ExtraTo;
+        row.ExtraExcludedPersonIds = excluded.Length == 0 ? null : string.Join(';', excluded);
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -79,14 +98,36 @@ public class PotService(
     {
         var settings = await GetSettingsAsync(cancellationToken);
         var (source, members) = await GetMembersAsync(sourceKey, cancellationToken);
-        var memberStatuses = await statuses.GetStatusesAsync(members.Select(m => m.PersonId), cancellationToken);
+        var statusTask = statuses.GetStatusesAsync(members.Select(m => m.PersonId), cancellationToken);
+        var extraTask = GetExtraContributionsAsync(settings, cancellationToken);
+        var memberStatuses = await statusTask;
+        var extra = await extraTask;
 
         simulated = Math.Max(0, simulated);
         var result = PotSimulator.Simulate(
             members.Select(m => new PotMember(m.PersonId, m.DisplayName, memberStatuses.GetValueOrDefault(m.PersonId))),
-            settings.ExtraContributions + simulated,
+            extra.Amount + simulated,
             strategy);
-        return new PotScreen(source, settings, simulated, result);
+        return new PotScreen(source, settings, extra, simulated, result);
+    }
+
+    /// <summary>
+    /// The real extra contributions. Everyone on a team or in a group counts as a member, so their own
+    /// contributions are never extra, whichever source the screen shows.
+    /// </summary>
+    public async Task<ExtraContributionsResult> GetExtraContributionsAsync(PotSettings settings, CancellationToken cancellationToken = default) =>
+        await extraContributions.GetAsync(settings, await GetAllMemberIdsAsync(cancellationToken), Today, cancellationToken);
+
+    /// <summary>The extra-contribution sources in the order they're tried, and whether each is set up.</summary>
+    public async Task<IReadOnlyList<(string Name, bool Available)>> DescribeExtraSourcesAsync(PotSettings settings,
+        CancellationToken cancellationToken = default) =>
+        extraContributions.Describe(settings.ToQuery(await GetAllMemberIdsAsync(cancellationToken), Today));
+
+    private async Task<HashSet<int>> GetAllMemberIdsAsync(CancellationToken cancellationToken)
+    {
+        var ids = (await teams.GetAllAsync(cancellationToken)).SelectMany(t => t.Members).Select(m => m.PersonId).ToHashSet();
+        ids.UnionWith((await groups.GetAllAsync(cancellationToken)).SelectMany(g => g.Members).Select(m => m.PersonId));
+        return ids;
     }
 
     private async Task<(PotSource, List<(int PersonId, string? DisplayName)>)> GetMembersAsync(

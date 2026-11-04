@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace BukStatus.Core.Pot;
 
 /// <summary>
@@ -20,18 +22,54 @@ public class PotSettings
     public decimal SamvirkPercent { get; set; }
 
     /// <summary>
-    /// Extra contributions (kr) collected outside the members' own targets, e.g. donations from people without a
-    /// contribution plan. The pot is spread over the members who aren't ajour.
+    /// Extra contributions (kr) typed in by hand: money collected outside the members' own targets, e.g. donations
+    /// from people without a contribution plan. Used in manual mode, and as a fallback when fetching fails.
     /// </summary>
     public decimal ExtraContributions { get; set; }
 
     /// <summary>Goals for the combined score, in percent, separated by semicolons (e.g. "70;75").</summary>
     public string Milestones { get; set; } = "70;75";
 
+    public ExtraContributionsMode ExtraMode { get; set; } = ExtraContributionsMode.Manual;
+
+    /// <summary>BCC org id to read contributions for, in automatic mode.</summary>
+    public int? ExtraOrgId { get; set; }
+
+    /// <summary>Only contributions whose description contains this count (e.g. "Donation"). Empty counts all.</summary>
+    public string? ExtraDescriptionFilter { get; set; }
+
+    /// <summary>Start of the period; defaults to 1 January this year.</summary>
+    public DateOnly? ExtraFrom { get; set; }
+
+    /// <summary>End of the period (inclusive); defaults to today.</summary>
+    public DateOnly? ExtraTo { get; set; }
+
+    /// <summary>
+    /// People whose contributions never count as extra, separated by semicolons (e.g. former members). Everyone on a
+    /// team or in a group is always excluded.
+    /// </summary>
+    public string? ExtraExcludedPersonIds { get; set; }
+
     public IReadOnlyList<decimal> MilestoneList =>
-        Milestones.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(m => decimal.TryParse(m, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : -1)
+        Split(Milestones)
+            .Select(m => decimal.TryParse(m, NumberStyles.Number, CultureInfo.InvariantCulture, out var v) ? v : -1)
             .Where(v => v is > 0 and <= 100)
             .Order()
             .ToList();
+
+    public IReadOnlyList<int> ExcludedPersonIdList =>
+        Split(ExtraExcludedPersonIds)
+            .Select(v => int.TryParse(v, NumberStyles.None, CultureInfo.InvariantCulture, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .ToList();
+
+    public ExtraContributionsQuery ToQuery(IEnumerable<int> memberIds, DateOnly today) => new(
+        ExtraOrgId,
+        string.IsNullOrWhiteSpace(ExtraDescriptionFilter) ? null : ExtraDescriptionFilter.Trim(),
+        ExtraFrom ?? new DateOnly(today.Year, 1, 1),
+        ExtraTo ?? today,
+        memberIds.Concat(ExcludedPersonIdList).ToHashSet());
+
+    internal static string[] Split(string? value) =>
+        (value ?? "").Split([';', ',', ' ', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }

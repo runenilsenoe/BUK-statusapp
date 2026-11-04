@@ -31,5 +31,10 @@ services:
       # Key for the Telegram bot / scripts calling /api (header X-Api-Key). Generate with: openssl rand -hex 32
       Auth__ApiKeys__0: ${API_KEY_BOT:-}
 
+      # Optional backup for the pot screen's extra contributions when the BCC API doesn't answer (old PACEFEST source).
+      Myshare__BaseUrl: ${MYSHARE_BASE_URL:-}
+      Myshare__Bearer: ${MYSHARE_BEARER:-}
+      Myshare__ClubId: ${MYSHARE_CLUB_ID:-0}
+
 volumes:
   bukstatus-data:

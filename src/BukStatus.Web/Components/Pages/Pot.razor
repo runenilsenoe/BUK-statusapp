@@ -70,6 +70,11 @@
         var settings = screen.Settings;
         var combined = screen.CombinedPercent;
 
+        @if (screen.Extra.Warning is not null)
+        {
+            <p class="notice">@screen.Extra.Warning</p>
+        }
+
         <section class="pot-scores">
             <div class="pot-score">
                 <img src="pot/coin-buk.gif" alt="" width="56" height="56" />
@@ -124,7 +129,11 @@
         </p>
 
         <dl class="pot-facts">
-            <div><dt>Faktiske ekstrabidrag</dt><dd>@Format.Kr(settings.ExtraContributions)</dd></div>
+            <div>
+                <dt>Faktiske ekstrabidrag</dt>
+                <dd>@Format.Kr(screen.Extra.Amount)</dd>
+                <dd class="muted small">@(screen.Extra.Automatic ? $"{screen.Extra.Count} bidrag fra {screen.Extra.Source}" : screen.Extra.Source)</dd>
+            </div>
             @if (screen.Simulated > 0)
             {
                 <div><dt>Simulert i tillegg</dt><dd>@Format.Kr(screen.Simulated)</dd></div>

@@ -30,13 +30,21 @@ public static class ServiceCollectionExtensions
         {
             services.AddSingleton<IMemberStatusService, FakeMemberStatusService>();
             services.AddSingleton<IContributionHistoryService, FakeContributionHistoryService>();
+            services.AddSingleton<IExtraContributionsSource, FakeExtraContributionsSource>();
         }
         else
         {
             services.AddBccContributionsApi(configuration);
             services.AddSingleton<IMemberStatusService, BccMemberStatusService>();
             services.AddSingleton<IContributionHistoryService, BccContributionHistoryService>();
+            services.AddSingleton<IExtraContributionsSource, BccExtraContributionsSource>();
         }
+
+        // myshare is the backup for extra contributions (tried after the BCC API), and only used when configured.
+        services.AddOptions<MyshareOptions>().Bind(configuration.GetSection(MyshareOptions.SectionName));
+        services.AddHttpClient(MyshareExtraContributionsSource.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(30));
+        services.AddSingleton<IExtraContributionsSource, MyshareExtraContributionsSource>();
+        services.AddSingleton<ExtraContributionsService>();
 
         var connectionString = configuration.GetConnectionString("BukStatus") ?? "Data Source=bukstatus.db";
         services.AddDbContextFactory<BukStatusDbContext>(options => options.UseSqlite(connectionString));

@@ -4,6 +4,8 @@ using BukStatus.Core.Status;
 using BukStatus.Core.Teams;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BukStatus.Core.Tests;
 
@@ -23,7 +25,9 @@ public sealed class PotServiceTests : IDisposable
         var factory = new TestDbContextFactory(options);
         _teams = new TeamService(factory);
         _groups = new GroupService(factory);
-        _pot = new PotService(factory, _teams, _groups, new FakeMemberStatusService());
+        var extra = new ExtraContributionsService([], new MemoryCache(new MemoryCacheOptions()),
+            NullLogger<ExtraContributionsService>.Instance);
+        _pot = new PotService(factory, _teams, _groups, new FakeMemberStatusService(), extra, TimeProvider.System);
     }
 
     public void Dispose() => _connection.Dispose();
@@ -48,6 +52,23 @@ public sealed class PotServiceTests : IDisposable
         Assert.Equal(72m, saved.SamvirkPercent);
         Assert.Equal(12_500m, saved.ExtraContributions);
         Assert.Equal("70;75", saved.Milestones);
+        Assert.Equal(ExtraContributionsMode.Manual, saved.ExtraMode);
+
+        await _pot.SaveSettingsAsync(new PotSettings
+        {
+            Title = "T",
+            ExtraMode = ExtraContributionsMode.Automatic,
+            ExtraOrgId = 55,
+            ExtraDescriptionFilter = " Donation ",
+            ExtraFrom = new DateOnly(2026, 1, 1),
+            ExtraExcludedPersonIds = "12, 13",
+        });
+        saved = await _pot.GetSettingsAsync();
+        Assert.Equal(ExtraContributionsMode.Automatic, saved.ExtraMode);
+        Assert.Equal(55, saved.ExtraOrgId);
+        Assert.Equal("Donation", saved.ExtraDescriptionFilter);
+        Assert.Equal(new DateOnly(2026, 1, 1), saved.ExtraFrom);
+        Assert.Equal("12;13", saved.ExtraExcludedPersonIds);
     }
 
     [Theory]
@@ -76,7 +97,7 @@ public sealed class PotServiceTests : IDisposable
         await _teams.AddMemberAsync(b.Id, 3, null);
         var group = await _groups.CreateAsync("G");
         await _groups.AddMemberAsync(group.Id, 3, null);
-        await _pot.SaveSettingsAsync(new PotSettings { Title = "T", ExtraContributions = 1_000 });
+        await _pot.SaveSettingsAsync(new PotSettings { Title = "T", ExtraContributions = 1_000 }); // manual mode
 
         var all = await _pot.GetScreenAsync(null, 500, PotStrategy.Even);
         Assert.Equal(PotSource.AllTeamsKey, all.Source.Key);
