@@ -12,6 +12,11 @@
     <p>Du er logget inn som <strong>@name</strong> (person-ID @personId), men har ikke tilgang til BUK Status.</p>
     <p class="muted">Be en administrator legge til person-ID-en din i Auth:AllowedPersonIds.</p>
 }
+else if (signedIn)
+{
+    <p>Du er logget inn@(name is null ? "" : $" som {name}"), men innloggingen fra BCC inneholdt ingen person-ID, så vi kan ikke sjekke tilgangen din.</p>
+    <p class="muted">Gi beskjed til en administrator. BCC-login må sende kravet @BukClaims.PersonId.</p>
+}
 else
 {
     <p>Du har ikke tilgang til denne siden.</p>
@@ -27,12 +32,14 @@ else
 
     private int? personId;
     private string? name;
+    private bool signedIn;
 
     protected override async Task OnInitializedAsync()
     {
         if (AuthState is null)
             return;
         var user = (await AuthState).User;
+        signedIn = user.Identity?.IsAuthenticated == true;
         personId = user.PersonId();
         name = user.Identity?.Name ?? user.FindFirst(ClaimTypes.Email)?.Value;
     }
