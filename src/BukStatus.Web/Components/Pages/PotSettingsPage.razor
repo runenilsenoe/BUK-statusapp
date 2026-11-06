@@ -38,6 +38,15 @@
                 <input @bind="settings.Milestones" maxlength="100" placeholder="70;75" />
             </label>
         </div>
+        <label class="check-row">
+            <input type="checkbox" @bind="settings.PublicScreenEnabled" />
+            Åpen storskjerm uten innlogging på <a href="skjerm" target="_blank">/skjerm</a>
+        </label>
+        <p class="muted small" style="max-width: 760px;">
+            Den åpne skjermen viser totaler og stolper uten navn eller beløp per person, og oppdateres hvert 30. sekund.
+            Alle som har lenken kan se den. Velg utvalg med <code>?kilde=lag-1</code> eller <code>?kilde=gruppe-1</code>,
+            og <code>?fordeling=flest</code> for «Flest mulig ajour».
+        </p>
 
         <h2 class="form-section">Ekstrabidrag</h2>
         <p class="muted" style="max-width: 760px;">

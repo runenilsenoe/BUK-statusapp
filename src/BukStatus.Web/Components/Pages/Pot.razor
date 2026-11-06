@@ -66,83 +66,7 @@
     }
     else
     {
-        var result = screen.Result;
-        var settings = screen.Settings;
-        var combined = screen.CombinedPercent;
-
-        @if (screen.Extra.Warning is not null)
-        {
-            <p class="notice">@screen.Extra.Warning</p>
-        }
-
-        <section class="pot-scores">
-            <div class="pot-score">
-                <img src="pot/coin-buk.gif" alt="" width="56" height="56" />
-                <div>
-                    <span class="label">BUK</span>
-                    <span class="value">@Format.Pct(result.OnTrackWithPotPercent)</span>
-                    <span class="muted small">
-                        @result.OnTrackWithPotCount av @result.Count ajour
-                        @if (result.PotUsed > 0)
-                        {
-                            <text> · @Format.Pct(result.OnTrackPercent) uten pott</text>
-                        }
-                    </span>
-                </div>
-            </div>
-            <div class="pot-score">
-                <img src="pot/coin-samvirk.gif" alt="" width="56" height="56" />
-                <div>
-                    <span class="label">Samvirk</span>
-                    <span class="value">@Format.Pct(settings.SamvirkPercent)</span>
-                    <span class="muted small">Legges inn under innstillinger</span>
-                </div>
-            </div>
-            <div class="pot-score pot-combined">
-                <img src="pot/medal.png" alt="" width="56" height="56" />
-                <div>
-                    <span class="label">@settings.Title</span>
-                    <span class="value">@Format.Pct(combined)</span>
-                    <span class="muted small">@(settings.Subtitle ?? "Snittet av BUK og Samvirk")</span>
-                </div>
-            </div>
-        </section>
-
-        <section class="pot-milestones" aria-label="Samlet mot målene">
-            <div class="pot-milestone-track">
-                <div class="pot-milestone-fill" style="width: @Css(Math.Clamp(combined, 0, 100))%"></div>
-                @foreach (var milestone in settings.MilestoneList)
-                {
-                    <div class="pot-milestone @(combined >= milestone ? "hit" : "")" style="left: @Css(milestone)%">
-                        <span>@Format.Pct(milestone)</span>
-                    </div>
-                }
-            </div>
-        </section>
-
-        <PotChart Members="result.Members" />
-        <p class="pot-legend muted small">
-            <span class="swatch behind"></span> Eget bidrag
-            <span class="swatch good"></span> Ajour
-            <span class="swatch pot"></span> Fra potten
-            · Hver stolpe er én person, målt mot ajour-målet sitt.
-        </p>
-
-        <dl class="pot-facts">
-            <div>
-                <dt>Faktiske ekstrabidrag</dt>
-                <dd>@Format.Kr(screen.Extra.Amount)</dd>
-                <dd class="muted small">@(screen.Extra.Automatic ? $"{screen.Extra.Count} bidrag fra {screen.Extra.Source}" : screen.Extra.Source)</dd>
-            </div>
-            @if (screen.Simulated > 0)
-            {
-                <div><dt>Simulert i tillegg</dt><dd>@Format.Kr(screen.Simulated)</dd></div>
-            }
-            <div><dt>Brukt av potten</dt><dd>@Format.Kr(result.PotUsed)@(result.PotLeft > 0 ? $" ({Format.Kr(result.PotLeft)} til overs)" : "")</dd></div>
-            <div><dt>Mangler for at alle er ajour</dt><dd>@Format.Kr(result.RemainingForAllOnTrack)</dd></div>
-            <div><dt>Med status</dt><dd>@result.Count personer@(result.MembersWithoutStatus > 0 ? $" ({result.MembersWithoutStatus} uten status)" : "")</dd></div>
-            <div><dt>Oppdatert</dt><dd>@(lastLoaded?.ToString("HH:mm:ss") ?? "–")</dd></div>
-        </dl>
+        <PotBoard Screen="screen" LastLoaded="lastLoaded" />
     }
 </div>
 
@@ -281,8 +205,6 @@
             Logger.LogDebug(ex, "Could not toggle fullscreen");
         }
     }
-
-    private static string Css(decimal value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
     public async ValueTask DisposeAsync()
     {

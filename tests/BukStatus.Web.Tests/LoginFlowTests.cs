@@ -1,6 +1,8 @@
 using System.Net;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
+using BukStatus.Core.Pot;
+using BukStatus.Core.Teams;
 using BukStatus.Web.Auth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -196,5 +198,37 @@ public sealed class LoginFlowTests : IDisposable
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.StartsWith("https://login.bcc.no/v2/logout?client_id=test-client&returnTo=", response.Headers.Location!.ToString());
         Assert.Contains(response.Headers.GetValues("Set-Cookie"), c => c.StartsWith("bukstatus.auth=;"));
+    }
+
+    [Fact]
+    public async Task Open_screen_is_off_until_switched_on()
+    {
+        _client.DefaultRequestHeaders.Clear();
+        var response = await Send(HttpMethod.Get, "/skjerm");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Open_screen_needs_no_login_and_shows_no_names()
+    {
+        var teams = _app.Services.GetRequiredService<TeamService>();
+        var team = await teams.CreateAsync("Snekker");
+        await teams.AddMemberAsync(team.Id, 424242, "Kari Hemmelig");
+        await _app.Services.GetRequiredService<PotService>().SaveSettingsAsync(
+            new PotSettings { Title = "SØRLANDET", SamvirkPercent = 72, PublicScreenEnabled = true });
+
+        var response = await Send(HttpMethod.Get, "/skjerm?kilde=" + PotSource.TeamKey(team.Id));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Snekker", html);
+        Assert.Contains("pot-bar", html);
+        Assert.Contains("http-equiv=\"refresh\"", html);
+        Assert.DoesNotContain("Kari Hemmelig", html);
+        Assert.DoesNotContain("424242", html);
+        // The rest of the site stays closed.
+        Assert.Equal(HttpStatusCode.Redirect, (await Send(HttpMethod.Get, "/pot")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Get, "/api/pot")).StatusCode);
     }
 }

@@ -30,6 +30,12 @@ public class PotSettings
     /// <summary>Goals for the combined score, in percent, separated by semicolons (e.g. "70;75").</summary>
     public string Milestones { get; set; } = "70;75";
 
+    /// <summary>
+    /// Whether the big screen at /skjerm is open without login. It shows totals and anonymous bars only, no names or
+    /// amounts per person.
+    /// </summary>
+    public bool PublicScreenEnabled { get; set; }
+
     public ExtraContributionsMode ExtraMode { get; set; } = ExtraContributionsMode.Manual;
 
     /// <summary>BCC org id to read contributions for, in automatic mode.</summary>

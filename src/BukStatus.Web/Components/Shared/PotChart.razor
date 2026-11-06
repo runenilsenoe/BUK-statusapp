@@ -9,7 +9,7 @@
         {
             var own = Math.Min(member.AjourPercent, Max);
             var withPot = Math.Min(member.AjourPercentWithPot, Max);
-            <div class="pot-bar @(member.IsOnTrackWithPot ? "done" : "")" title="@Tooltip(member)">
+            <div class="pot-bar @(member.IsOnTrackWithPot ? "done" : "")" title="@(ShowNames ? Tooltip(member) : null)">
                 <div class="pot-bar-own @(member.IsOnTrack ? "good" : "behind")" style="height: @Css(own / Max * 100)%"></div>
                 @if (withPot > own)
                 {
@@ -25,6 +25,9 @@
 
     /// <summary>Top of the scale, in percent of the ajour target. Bars above are cut off.</summary>
     [Parameter] public decimal Max { get; set; } = 150;
+
+    /// <summary>Name and amounts per person on hover. Off on the open screen.</summary>
+    [Parameter] public bool ShowNames { get; set; } = true;
 
     private static string Css(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
 
