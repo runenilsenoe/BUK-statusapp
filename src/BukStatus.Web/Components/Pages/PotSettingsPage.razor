@@ -1,0 +1,191 @@
+@page "/settings/pot"
+@rendermode InteractiveServer
+@using BukStatus.Core.Pot
+@inject PotService PotService
+
+<PageTitle>Innstillinger for pott · BUK Status</PageTitle>
+
+<p><a href="pot">← Pott</a></p>
+
+<div class="page-header">
+    <h1>Innstillinger for pott</h1>
+</div>
+
+@if (error is not null)
+{
+    <p class="alert">@error</p>
+}
+
+@if (settings is not null)
+{
+    <form @onsubmit="Save">
+        <h2 class="form-section">Skjerm</h2>
+        <div class="form-grid">
+            <label>
+                Overskrift for samlet score
+                <input @bind="settings.Title" maxlength="100" placeholder="f.eks. SØRLANDET" />
+            </label>
+            <label>
+                Undertekst (valgfritt)
+                <input @bind="settings.Subtitle" maxlength="200" placeholder="f.eks. sorlandet.donationbuk.no" />
+            </label>
+            <label>
+                Samvirk ajour (%)
+                <input type="number" min="0" max="100" step="any" @bind="settings.SamvirkPercent" />
+            </label>
+            <label>
+                Mål for samlet score (%)
+                <input @bind="settings.Milestones" maxlength="100" placeholder="70;75" />
+            </label>
+        </div>
+
+        <h2 class="form-section">Ekstrabidrag</h2>
+        <p class="muted" style="max-width: 760px;">
+            Ekstrabidrag er penger som har kommet inn utenom medlemmenes egne mål, for eksempel gaver fra personer uten
+            bidragsplan. Potten fordeles på dem som ikke er ajour. Bidrag fra alle som er på et lag eller i en gruppe
+            regnes aldri som ekstrabidrag.
+        </p>
+
+        <div class="radio-row">
+            <label><input type="radio" name="extra-mode" checked="@(settings.ExtraMode == ExtraContributionsMode.Automatic)" @onchange="() => SetMode(ExtraContributionsMode.Automatic)" /> Hent automatisk</label>
+            <label><input type="radio" name="extra-mode" checked="@(settings.ExtraMode == ExtraContributionsMode.Manual)" @onchange="() => SetMode(ExtraContributionsMode.Manual)" /> Legg inn manuelt</label>
+        </div>
+
+        @if (settings.ExtraMode == ExtraContributionsMode.Automatic)
+        {
+            <div class="form-grid">
+                <label>
+                    BCC org-ID
+                    <input type="number" min="1" @bind="settings.ExtraOrgId" />
+                </label>
+                <label>
+                    Beskrivelsen må inneholde (valgfritt)
+                    <input @bind="settings.ExtraDescriptionFilter" maxlength="200" placeholder="f.eks. Donation" />
+                </label>
+                <label>
+                    Fra dato
+                    <input type="date" @bind="settings.ExtraFrom" />
+                </label>
+                <label>
+                    Til dato
+                    <input type="date" @bind="settings.ExtraTo" />
+                </label>
+                <label>
+                    Unntatte person-ID-er (valgfritt)
+                    <input @bind="settings.ExtraExcludedPersonIds" maxlength="2000" placeholder="f.eks. tidligere medlemmer: 123;456" />
+                </label>
+            </div>
+            <p class="muted small" style="max-width: 760px;">
+                Uten fra-dato brukes 1. januar i år, og uten til-dato brukes dagens dato. Kildene prøves i denne
+                rekkefølgen, og det manuelle beløpet under brukes hvis ingen av dem svarer:
+            </p>
+            <ol class="source-list small">
+                @foreach (var (name, available) in sources)
+                {
+                    <li>@name: @(available ? "satt opp" : name == "myshare" ? "ikke satt opp (Myshare__BaseUrl, Myshare__Bearer og Myshare__ClubId)" : "mangler org-ID")</li>
+                }
+            </ol>
+        }
+
+        <div class="form-grid" style="grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));">
+            <label>
+                @(settings.ExtraMode == ExtraContributionsMode.Manual ? "Ekstrabidrag (kr)" : "Manuelt beløp hvis hentingen feiler (kr)")
+                <input type="number" min="0" step="any" @bind="settings.ExtraContributions" />
+            </label>
+        </div>
+
+        <div class="toolbar">
+            <button type="submit" class="primary" disabled="@busy">Lagre</button>
+            @if (settings.ExtraMode == ExtraContributionsMode.Automatic)
+            {
+                <button type="button" @onclick="Test" disabled="@busy">Test henting</button>
+            }
+            @if (saved)
+            {
+                <span class="muted">Lagret.</span>
+            }
+        </div>
+
+        @if (test is not null)
+        {
+            <p class="@(test.Warning is null ? "notice" : "alert")">
+                @Format.Kr(test.Amount) @(test.Automatic ? $"fra {test.Count} bidrag i {test.Source}." : $"({test.Source}).")
+                @test.Warning
+            </p>
+        }
+    </form>
+}
+
+@code {
+    private PotSettings? settings;
+    private IReadOnlyList<(string Name, bool Available)> sources = [];
+    private ExtraContributionsResult? test;
+    private string? error;
+    private bool busy;
+    private bool saved;
+
+    protected override async Task OnInitializedAsync()
+    {
+        settings = await PotService.GetSettingsAsync();
+        await RefreshSources();
+    }
+
+    private async Task RefreshSources()
+    {
+        if (settings is not null)
+            sources = await PotService.DescribeExtraSourcesAsync(settings);
+    }
+
+    private async Task SetMode(ExtraContributionsMode mode)
+    {
+        settings!.ExtraMode = mode;
+        test = null;
+        await RefreshSources();
+    }
+
+    private async Task Save()
+    {
+        if (settings is null)
+            return;
+        busy = true;
+        error = null;
+        saved = false;
+        try
+        {
+            await PotService.SaveSettingsAsync(settings);
+            saved = true;
+            await RefreshSources();
+        }
+        catch (GroupException ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    /// <summary>Fetches with the current (unsaved) values, so the org id and filter can be tried before saving.</summary>
+    private async Task Test()
+    {
+        if (settings is null)
+            return;
+        busy = true;
+        error = null;
+        test = null;
+        try
+        {
+            await RefreshSources();
+            test = await PotService.GetExtraContributionsAsync(settings);
+        }
+        catch (Exception ex)
+        {
+            error = $"Henting feilet: {ex.Message}";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

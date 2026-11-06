@@ -63,6 +63,58 @@ namespace BukStatus.Core.Groups.Migrations
                     b.ToTable("GroupMembers");
                 });
 
+            modelBuilder.Entity("BukStatus.Core.Pot.PotSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("ExtraContributions")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ExtraDescriptionFilter")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ExtraExcludedPersonIds")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("ExtraFrom")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ExtraMode")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ExtraOrgId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly?>("ExtraTo")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Milestones")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("SamvirkPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Subtitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("PotSettings");
+                });
+
             modelBuilder.Entity("BukStatus.Core.Teams.MonthlyTarget", b =>
                 {
                     b.Property<int>("Id")

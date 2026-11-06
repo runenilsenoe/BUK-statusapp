@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -69,6 +70,10 @@ public static class AuthSetup
                 oidc.Scope.Add("email");
                 // Keep BCC's claim names as-is, e.g. https://login.bcc.no/claims/personId.
                 oidc.MapInboundClaims = false;
+                // The person id normally comes in the id_token. Ask userinfo as well, so login still works if BCC only
+                // puts it there.
+                oidc.GetClaimsFromUserInfoEndpoint = true;
+                oidc.ClaimActions.MapUniqueJsonKey(BukClaims.PersonId, BukClaims.PersonId);
                 oidc.TokenValidationParameters.NameClaimType = "name";
             });
 
@@ -90,8 +95,12 @@ public static class AuthSetup
                 [OpenIdConnectDefaults.AuthenticationScheme]))
             .AllowAnonymous();
 
-        app.MapPost("/account/logout", async (HttpContext context, IOptions<BukAuthOptions> options) =>
+        app.MapPost("/account/logout", async (HttpContext context, IAntiforgery antiforgery, IOptions<BukAuthOptions> options) =>
         {
+            // The logout forms send an antiforgery token; without this check, another site could log people out.
+            if (!await antiforgery.IsRequestValidAsync(context))
+                return Results.BadRequest();
+
             await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             if (!options.Value.OidcConfigured)
                 return Results.LocalRedirect("/");
@@ -101,7 +110,8 @@ public static class AuthSetup
             var logoutUrl = $"{options.Value.Authority.TrimEnd('/')}/v2/logout" +
                             $"?client_id={Uri.EscapeDataString(options.Value.ClientId)}&returnTo={Uri.EscapeDataString(returnTo)}";
             return Results.Redirect(logoutUrl);
-        }).AllowAnonymous();
+        })
+        .AllowAnonymous();
 
         return app;
     }

@@ -1,0 +1,39 @@
+@using System.Globalization
+@using BukStatus.Core.Pot
+
+@* One bar per member, lowest first: own contributions plus their share of the pot, against their ajour target. *@
+<div class="pot-chart" style="--bar-count: @Members.Count">
+    <div class="pot-chart-bars">
+        <div class="pot-chart-line" style="bottom: @Css(100 / Max * 100)%"><span>Ajour</span></div>
+        @foreach (var member in Members.OrderBy(m => m.AjourPercentWithPot).ThenBy(m => m.PersonId))
+        {
+            var own = Math.Min(member.AjourPercent, Max);
+            var withPot = Math.Min(member.AjourPercentWithPot, Max);
+            <div class="pot-bar @(member.IsOnTrackWithPot ? "done" : "")" title="@Tooltip(member)">
+                <div class="pot-bar-own @(member.IsOnTrack ? "good" : "behind")" style="height: @Css(own / Max * 100)%"></div>
+                @if (withPot > own)
+                {
+                    <div class="pot-bar-pot" style="height: @Css((withPot - own) / Max * 100)%"></div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<PotMemberResult> Members { get; set; } = [];
+
+    /// <summary>Top of the scale, in percent of the ajour target. Bars above are cut off.</summary>
+    [Parameter] public decimal Max { get; set; } = 150;
+
+    private static string Css(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static string Tooltip(PotMemberResult m)
+    {
+        var name = m.DisplayName ?? $"Person {m.PersonId}";
+        var text = $"{name}: {Format.Kr(m.Status.TotalContribution)} av {Format.Kr(m.Status.AjourTarget)} ({Format.Pct(m.AjourPercent)})";
+        if (m.Boost > 0)
+            text += $" + {Format.Kr(m.Boost)} fra potten";
+        return text;
+    }
+}

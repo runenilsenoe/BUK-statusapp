@@ -28,6 +28,7 @@ Alle hemmeligheter legges inn her, aldri i `appsettings.json`. Kryss av for **Is
 | `AUTH_CLIENT_SECRET` | ja | Client secret for BCC-login |
 | `AUTH_ALLOWED_PERSON_ID_1` | ja | Din BCC person-ID. Flere personer: se under. |
 | `API_KEY_BOT` | nei | Nøkkel for boten/skript mot `/api` (header `X-Api-Key`). Lag en med `openssl rand -hex 32`. |
+| `MYSHARE_BASE_URL`, `MYSHARE_BEARER`, `MYSHARE_CLUB_ID` | nei | Reserve for ekstrabidrag på Pott-siden hvis BCC-API-et ikke svarer. Bearer-tokenet er en hemmelighet. |
 
 **Flere personer med tilgang:** Legg til variablene `Auth__AllowedPersonIds__1`, `Auth__AllowedPersonIds__2` og så videre direkte i Coolify, med person-ID som verdi. Redeploy etterpå.
 

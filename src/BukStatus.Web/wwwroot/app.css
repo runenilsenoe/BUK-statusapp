@@ -214,3 +214,145 @@ textarea { font: inherit; width: 100%; min-height: 14rem; padding: 0.6rem; borde
 .targets input { width: 100%; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; max-width: 760px; margin-bottom: 1rem; }
 .form-grid label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--muted); }
+
+/* Pot screen (Components/Pages/Pot.razor), taken over from PACEFEST and MyBlazorProgressApp. */
+:root { --pot: #c9a227; }
+@media (prefers-color-scheme: dark) { :root { --pot: #e3c25a; } }
+
+select {
+    font: inherit;
+    padding: 0.45rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    max-width: 100%;
+}
+
+a.button {
+    display: inline-block;
+    padding: 0.45rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    text-decoration: none;
+}
+
+.pot-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem 1.25rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    margin-bottom: 1.25rem;
+}
+.pot-controls label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--muted); }
+.pot-controls input[type=number] { width: 9rem; }
+.pot-slider { flex: 1 1 18rem; }
+.pot-slider input { width: 100%; padding: 0; accent-color: var(--pot); }
+.pot-controls .pot-check { flex-direction: row; align-items: center; gap: 0.4rem; }
+.pot-strategy { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.pot-strategy legend { font-size: 0.85rem; color: var(--muted); padding: 0; margin-bottom: 0.15rem; }
+.pot-strategy label { flex-direction: row; align-items: center; gap: 0.4rem; color: var(--text); }
+
+.pot-scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.pot-score {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+}
+.pot-score > div { display: flex; flex-direction: column; min-width: 0; }
+.pot-score img { flex: none; }
+.pot-score .label { font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.85rem; overflow-wrap: anywhere; }
+.pot-score .value { font-size: 2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.pot-combined { border-color: var(--pot); }
+
+.pot-milestones { padding: 1.9rem 0 1.9rem; margin-bottom: 0.25rem; }
+.pot-milestone-track { position: relative; height: 14px; background: var(--track); border-radius: 7px; }
+.pot-milestone-fill { height: 100%; border-radius: 7px; background: var(--pot); transition: width 0.4s ease; }
+.pot-milestone { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: 0.5; }
+.pot-milestone span {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translate(-50%, -6px);
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    padding: 0.05rem 0.4rem;
+    border-radius: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+}
+/* Every other label goes under the bar so close goals (70 and 75 %) don't overlap. */
+.pot-milestone:nth-of-type(odd) span { bottom: auto; top: 100%; transform: translate(-50%, 6px); }
+.pot-milestone.hit { opacity: 1; background: var(--good); }
+.pot-milestone.hit span { background: var(--good-bg); color: var(--good); border-color: var(--good); }
+
+.pot-chart {
+    position: relative;
+    height: 320px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.75rem;
+    overflow-x: auto;
+}
+.pot-chart-bars { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 100%; min-width: calc(var(--bar-count) * 5px); }
+.pot-bar { position: relative; flex: 1 1 0; max-width: 28px; min-width: 3px; height: 100%; display: flex; flex-direction: column-reverse; }
+.pot-bar-own, .pot-bar-pot { width: 100%; flex: none; }
+.pot-bar-own.good { background: var(--good); }
+.pot-bar-own.behind { background: var(--behind); }
+.pot-bar-pot { background: var(--pot); }
+.pot-bar:hover { outline: 1px solid var(--text); }
+.pot-chart-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 0;
+    border-top: 2px dashed var(--text);
+    opacity: 0.6;
+    z-index: 1;
+    pointer-events: none;
+}
+.pot-chart-line span { position: absolute; left: 0; bottom: 3px; font-size: 0.75rem; font-weight: 600; padding: 0 0.3rem; border-radius: 3px; background: var(--surface); }
+
+.pot-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; margin: 0.5rem 0 1rem; }
+.swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 2px; }
+.swatch.good { background: var(--good); }
+.swatch.behind { background: var(--behind); }
+.swatch.pot { background: var(--pot); }
+
+.pot-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin: 0; }
+.pot-facts > div { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.6rem 0.9rem; }
+.pot-facts dt { color: var(--muted); font-size: 0.8rem; }
+.pot-facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pot-facts dd.small { font-weight: 400; }
+.notice + .pot-scores { margin-top: 1rem; }
+.form-section { margin: 1.5rem 0 0.75rem; }
+.radio-row { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin-bottom: 0.75rem; }
+.radio-row label { display: flex; align-items: center; gap: 0.4rem; }
+.source-list { margin: 0.25rem 0 1rem; padding-left: 1.2rem; }
+
+/* Big screen: hide the menu, use the whole width and scale up. */
+body:has(.pot-big) .topbar { display: none; }
+.page:has(.pot-big) { max-width: none; padding: 1rem 2rem; }
+.pot-big .pot-score .value { font-size: 3.2rem; }
+.pot-big .pot-score .label { font-size: 1.1rem; }
+.pot-big .pot-score img { width: 88px; height: 88px; }
+.pot-big .pot-chart { height: 52vh; }
+.pot-big .pot-milestone-track { height: 22px; border-radius: 11px; }
+.pot-big .pot-milestone-fill { border-radius: 11px; }
+
+@media (max-width: 600px) {
+    .pot-score .value { font-size: 1.6rem; }
+    .pot-chart { height: 240px; }
+}
