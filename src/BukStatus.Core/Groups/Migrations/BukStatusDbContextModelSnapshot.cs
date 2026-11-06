@@ -97,6 +97,9 @@ namespace BukStatus.Core.Groups.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("PublicScreenEnabled")
+                        .HasColumnType("INTEGER");
+
                     b.Property<decimal>("SamvirkPercent")
                         .HasPrecision(5, 2)
                         .HasColumnType("TEXT");

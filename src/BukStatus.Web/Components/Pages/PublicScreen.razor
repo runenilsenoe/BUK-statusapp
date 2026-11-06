@@ -1,0 +1,84 @@
+@page "/skjerm"
+@attribute [AllowAnonymous]
+@layout Layout.ScreenLayout
+@using BukStatus.Core.Pot
+@inject PotService PotService
+@inject ILogger<PublicScreen> Logger
+
+@*
+    The pot screen without login, for a big screen at an event. Rendered on the server without a live connection
+    (that needs login) and reloaded every 30 seconds. Shows totals and anonymous bars only: no names or amounts per
+    person. Switched on and off under the pot settings.
+    ?kilde=lag | lag-{id} | gruppe-{id}   ?fordeling=flest for "Flest mulig ajour"
+*@
+
+<PageTitle>@(screen?.Settings.Title ?? "BUK") · BUK Status</PageTitle>
+
+@if (!enabled)
+{
+    <h1>Ikke tilgjengelig</h1>
+    <p class="muted">Denne skjermen er ikke slått på.</p>
+}
+else
+{
+    <HeadContent>
+        <meta http-equiv="refresh" content="30" />
+        <meta name="robots" content="noindex" />
+    </HeadContent>
+
+    <div class="pot pot-big pot-public">
+        @if (screen is null)
+        {
+            <p class="muted">Klarte ikke å hente status. Prøver igjen om litt.</p>
+        }
+        else
+        {
+            <div class="page-header">
+                <h1>@screen.Source.Name</h1>
+            </div>
+            @if (screen.Result.Count == 0)
+            {
+                <p class="muted">Ingen med status ennå.</p>
+            }
+            else
+            {
+                <PotBoard Screen="screen" LastLoaded="loaded" ShowNames="false" ShowWarnings="false" />
+            }
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+    [SupplyParameterFromQuery(Name = "kilde")] public string? Kilde { get; set; }
+    [SupplyParameterFromQuery(Name = "fordeling")] public string? Fordeling { get; set; }
+
+    private bool enabled;
+    private PotScreen? screen;
+    private DateTime loaded;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var settings = await PotService.GetSettingsAsync();
+        enabled = settings.PublicScreenEnabled;
+        if (!enabled)
+        {
+            if (HttpContext is not null)
+                HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        var strategy = string.Equals(Fordeling, "flest", StringComparison.OrdinalIgnoreCase)
+            ? PotStrategy.MaximizeAjour
+            : PotStrategy.Even;
+        try
+        {
+            screen = await PotService.GetScreenAsync(Kilde, 0, strategy);
+            loaded = DateTime.Now;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not load the open pot screen");
+        }
+    }
+}

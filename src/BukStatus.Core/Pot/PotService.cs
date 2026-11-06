@@ -73,6 +73,7 @@ public class PotService(
         row.SamvirkPercent = settings.SamvirkPercent;
         row.ExtraContributions = settings.ExtraContributions;
         row.Milestones = string.Join(';', milestones);
+        row.PublicScreenEnabled = settings.PublicScreenEnabled;
         row.ExtraMode = settings.ExtraMode;
         row.ExtraOrgId = settings.ExtraOrgId;
         row.ExtraDescriptionFilter = string.IsNullOrWhiteSpace(settings.ExtraDescriptionFilter) ? null : settings.ExtraDescriptionFilter.Trim();
