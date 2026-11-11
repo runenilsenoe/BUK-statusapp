@@ -36,14 +36,7 @@ else
             <div class="page-header">
                 <h1>@screen.Source.Name</h1>
             </div>
-            @if (screen.Result.Count == 0)
-            {
-                <p class="muted">Ingen med status ennå.</p>
-            }
-            else
-            {
-                <PotBoard Screen="screen" LastLoaded="loaded" ShowNames="false" ShowWarnings="false" />
-            }
+            <PotBoard Screen="screen" LastLoaded="loaded" ShowNames="false" ShowWarnings="false" />
         }
     </div>
 }
