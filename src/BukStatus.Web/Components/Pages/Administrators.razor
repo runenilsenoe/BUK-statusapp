@@ -1,0 +1,67 @@
+@page "/administrators"
+@rendermode InteractiveServer
+@using BukStatus.Core.Administration
+@inject BukStatus.Web.Auth.AdministratorAccess Access
+
+<PageTitle>Administratorer · BUK Status</PageTitle>
+<h1>Administratorer</h1>
+@if (error is not null)
+{
+    <p class="alert">@error</p>
+}
+@if (administrators is not null)
+{
+    <p>Person-ID <strong>21410</strong> er fast superadministrator og kan ikke fjernes.</p>
+    <p>Administratorer kan endre lag, grupper og innstillinger i klubbene de har tilgang til i MyShare.</p>
+    <form class="inline-form" @onsubmit="Add">
+        <label>BCC person-ID <input type="number" min="1" @bind="personId" required /></label>
+        <label>Navn (valgfritt) <input @bind="name" maxlength="200" /></label>
+        <button type="submit" class="primary" disabled="@busy">Legg til administrator</button>
+    </form>
+    @if (administrators.Count == 0)
+    {
+        <p class="muted">Ingen andre administratorer er lagt til.</p>
+    }
+    else
+    {
+        <table>
+            <thead><tr><th>Navn</th><th>Person-ID</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var admin in administrators)
+            {
+                <tr><td>@(admin.DisplayName ?? "–")</td><td>@admin.PersonId</td>
+                    <td><button type="button" disabled="@busy" @onclick="() => Remove(admin.PersonId)">Fjern administrator</button></td></tr>
+            }
+            </tbody>
+        </table>
+    }
+}
+@code {
+    private List<Administrator>? administrators;
+    private int? personId;
+    private string? name;
+    private string? error;
+    private bool busy;
+    protected override async Task OnInitializedAsync()
+    {
+        try { administrators = await Access.GetAllAsync(); }
+        catch (UnauthorizedAccessException) { error = "Kun superadministratoren har tilgang til denne siden."; }
+    }
+    private Task Add() => Run(async () =>
+    {
+        if (personId is not > 0) throw new GroupException("Fyll inn en gyldig BCC person-ID.");
+        await Access.AddAsync(personId.Value, name);
+        personId = null;
+        name = null;
+    });
+    private Task Remove(int id) => Run(() => Access.RemoveAsync(id));
+    private async Task Run(Func<Task> action)
+    {
+        busy = true;
+        error = null;
+        try { await action(); administrators = await Access.GetAllAsync(); }
+        catch (UnauthorizedAccessException) { administrators = null; error = "Kun superadministratoren kan endre administratorer."; }
+        catch (GroupException ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+}

@@ -17,6 +17,26 @@ namespace BukStatus.Core.Groups.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.10");
 
+            modelBuilder.Entity("BukStatus.Core.Administration.Administrator", b =>
+                {
+                    b.Property<int>("PersonId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("AddedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("AddedBy")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("PersonId");
+
+                    b.ToTable("Administrators");
+                });
+
             modelBuilder.Entity("BukStatus.Core.Groups.Group", b =>
                 {
                     b.Property<int>("Id")

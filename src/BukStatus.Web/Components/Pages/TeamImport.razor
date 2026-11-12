@@ -19,6 +19,11 @@
     <button type="button" class="primary" disabled="@(busy || string.IsNullOrWhiteSpace(text))" @onclick="Import">Importer</button>
 </div>
 
+@if (error is not null)
+{
+    <p class="alert">@error</p>
+}
+
 @if (result is not null)
 {
     <div class="notice">
@@ -45,15 +50,22 @@
     private string text = "";
     private TeamService.ImportResult? result;
     private bool busy;
+    private string? error;
 
     private async Task Import()
     {
         busy = true;
+        error = null;
+        result = null;
         try
         {
             result = await TeamService.ImportAsync(text);
             if (result.Errors.Count == 0)
                 text = "";
+        }
+        catch (GroupException ex)
+        {
+            error = ex.Message;
         }
         finally
         {

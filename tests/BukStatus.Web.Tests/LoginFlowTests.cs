@@ -1,3 +1,5 @@
+using BukStatus.Core.Groups;
+using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
@@ -212,11 +214,12 @@ public sealed class LoginFlowTests : IDisposable
     [Fact]
     public async Task Open_screen_needs_no_login_and_shows_no_names()
     {
-        var teams = _app.Services.GetRequiredService<TeamService>();
-        var team = await teams.CreateAsync("Snekker");
-        await teams.AddMemberAsync(team.Id, 424242, "Kari Hemmelig");
-        await _app.Services.GetRequiredService<PotService>().SaveSettingsAsync(
-            new PotSettings { Title = "SØRLANDET", SamvirkPercent = 72, PublicScreenEnabled = true });
+        var factory = _app.Services.GetRequiredService<IDbContextFactory<BukStatusDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        var team = new Team { Name = "Snekker", Members = [new() { PersonId = 424242, DisplayName = "Kari Hemmelig" }] };
+        db.Teams.Add(team);
+        db.PotSettings.Add(new PotSettings { Title = "SØRLANDET", SamvirkPercent = 72, PublicScreenEnabled = true });
+        await db.SaveChangesAsync();
 
         var response = await Send(HttpMethod.Get, "/skjerm?kilde=" + PotSource.TeamKey(team.Id));
 
@@ -230,5 +233,14 @@ public sealed class LoginFlowTests : IDisposable
         // The rest of the site stays closed.
         Assert.Equal(HttpStatusCode.Redirect, (await Send(HttpMethod.Get, "/pot")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Get, "/api/pot")).StatusCode);
+    }
+    [Fact]
+    public async Task Superadmin_page_does_not_require_legacy_allowlist_and_is_hidden_from_other_users()
+    {
+        var super = await Send(HttpMethod.Get, "/administrators", LoginCookie("21410"));
+        Assert.Equal(HttpStatusCode.OK, super.StatusCode);
+        Assert.Contains("Legg til administrator", await super.Content.ReadAsStringAsync());
+        var ordinary = await Send(HttpMethod.Get, "/administrators", LoginCookie(AllowedPersonId));
+        Assert.DoesNotContain("Legg til administrator", await ordinary.Content.ReadAsStringAsync());
     }
 }

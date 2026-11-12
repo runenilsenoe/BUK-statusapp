@@ -1,0 +1,23 @@
+@using BukStatus.Core.Clubs
+@inject IClubContext Context
+@if (Context.Enabled)
+{
+    <div class="notice">
+        @if (clubName is not null)
+        {
+            <span>Klubb: <strong>@clubName</strong> · </span>
+        }
+        <a href="clubs">Velg klubb</a>
+        @if (failed) { <span> · Kunne ikke bekrefte klubbtilgang.</span> }
+    </div>
+}
+@code {
+    private string? clubName;
+    private bool failed;
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Context.Enabled) return;
+        try { clubName = (await Context.GetSelectedAsync())?.Club.Name; }
+        catch { failed = true; }
+    }
+}

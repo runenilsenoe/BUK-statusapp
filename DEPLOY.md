@@ -72,3 +72,51 @@ docker run --rm -p 8080:8080 -e BccApi__UseFakeData=true -e BccApi__ClientId=x -
 ```
 
 Uten ekte BCC-login kommer du ikke forbi innloggingen på websiden, men `/healthz` og `/api` (med `X-Api-Key: test`) fungerer.
+
+## Klubbtilgang og personvalg fra MyShare
+
+`MYSHARE_CLUB_ACCESS_ENABLED=true` aktiverer tilgang via `/Teams?userId=<innlogget BCC-person-ID>`.
+Alle klubber fra `/Clubs/<teamId>` blir tilgjengelige, uten krav om at brukeren står i klubbens `members`.
+Personvalg og klubboversikt bruker hele medlemslisten derfra, med navn og alder. Fødselsdato lagres ikke i
+lokale lag eller grupper, og returneres ikke fra medlems-API-et; alder beregnes i norsk tid.
+
+Konfigurer og test MyShare-tilgangen før aktivering:
+
+- `MYSHARE_BASE_URL=https://myshare-admin-api-prod-2ymy6hgl7q-ew.a.run.app/api/`
+- `MYSHARE_BEARER`: gyldig token for MyShare-admin-API-et, lagt inn som hemmelighet i Coolify.
+  Det er ikke bekreftet at Contributions-klientens token kan brukes her. Statisk bearer må fornyes når den utløper.
+- `MYSHARE_LEGACY_CLUB_ID=4050`: eksisterende lag, grupper og innstillinger tilhører BUK Sørlandet.
+  Bekreft denne koblingen før aktivering. Andre klubber starter med egne lokale data.
+- `MYSHARE_API_PERSON_ID`: eksplisitt MyShare-personidentitet for eksisterende maskin-API-nøkler.
+  Mangler den, får maskinklienter ikke tilgang når klubbtilgang er aktiv. De kan velge en autorisert klubb
+  med `X-Club-Id`, men ikke overstyre personidentiteten via forespørselen.
+
+Klubben velges under `/clubs`. Lag, grupper, mål og pottinnstillinger isoleres i separate SQLite-filer på
+samme vedvarende volum (`club-<id>.db`); den opprinnelige databasen beholdes for den konfigurerte eksisterende
+klubben. Ta backup av **alle** databasefiler. MyShare-tilgang caches i opptil 30 sekunder per brukerscope;
+ved API-feil etter utløp brukes ikke gamle tillatelser. Person-ID og klubbtilgang kontrolleres på serveren.
+
+Pottens standardvisning omfatter alle medlemmene i valgt klubb, også uten lokale lag.
+Automatiske ekstrabidrag bruker MyShare med valgt klubb og team. Contributions-org-ID brukes ikke som en
+antatt klubbkobling. Ved feil vises merket manuelt reservebeløp som før.
+
+I klubbmodus er anonym `/skjerm` deaktivert: en anonym besøkende har ingen verifiserbar teamtilgang.
+Innlogget Pott-side har fortsatt storskjermmodus. Tidligere `Auth:AllowedPersonIds` erstattes av MyShare-
+tilgangen i klubbmodus. Uten aktivering beholdes den tidligere tilgangsmodellen.
+
+Nye lesende endepunkter: `/api/clubs`, `/api/clubs/{id}/members`, `/api/clubs/{id}/status`.
+Ukjente eller uautoriserte klubb-ID-er gir 404, og ingen medlemsstatus hentes for dem.
+
+## Administratorer
+
+BCC person-ID **21410** er fast superadministrator. Den krever ikke en oppføring i
+`Auth:AllowedPersonIds`, kan ikke fjernes og får menyvalget **Administratorer** (`/administrators`).
+Bare denne innloggede personen kan legge til eller fjerne administratorer. Maskin-API-nøkler kan ikke
+administrere roller, heller ikke når de er knyttet til 21410. Rollen lagres i tabellen `Administrators`
+i den opprinnelige databasen, med hvem som la den til og tidspunkt. Tilbakekalling kontrolleres på nytt
+ved hver endring, uten rollecaching i innloggingscookien.
+
+I klubbmodus kan vanlige brukere lese klubbene MyShare gir tilgang til. Administratorer kan endre
+lag, grupper, import, månedsmål og pottinnstillinger i disse klubbene. Superadministrator- og
+administratorrollen overstyrer **ikke** MyShare-teamtilgang. Før klubbmodus aktiveres beholdes
+skriverettene til de tidligere eksplisitt tillatte brukerne og maskinnøklene.

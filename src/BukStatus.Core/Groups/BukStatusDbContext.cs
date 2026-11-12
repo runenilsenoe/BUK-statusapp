@@ -6,6 +6,7 @@ namespace BukStatus.Core.Groups;
 
 public class BukStatusDbContext(DbContextOptions<BukStatusDbContext> options) : DbContext(options)
 {
+    public DbSet<BukStatus.Core.Administration.Administrator> Administrators => Set<BukStatus.Core.Administration.Administrator>();
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
     public DbSet<Team> Teams => Set<Team>();
@@ -15,6 +16,10 @@ public class BukStatusDbContext(DbContextOptions<BukStatusDbContext> options) : 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<BukStatus.Core.Administration.Administrator>().HasKey(a => a.PersonId);
+        modelBuilder.Entity<BukStatus.Core.Administration.Administrator>().Property(a => a.PersonId).ValueGeneratedNever();
+        modelBuilder.Entity<BukStatus.Core.Administration.Administrator>().Property(a => a.DisplayName).HasMaxLength(200);
+
         modelBuilder.Entity<Team>(team =>
         {
             team.Property(t => t.Name).HasMaxLength(100);

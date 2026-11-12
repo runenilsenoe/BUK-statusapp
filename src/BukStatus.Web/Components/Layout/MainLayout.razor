@@ -1,4 +1,6 @@
-﻿@inherits LayoutComponentBase
+@inject BukStatus.Core.Clubs.IClubContext ClubAccess
+@using BukStatus.Web.Auth
+@inherits LayoutComponentBase
 
 <header class="topbar">
     <div class="nav">
@@ -6,12 +8,17 @@
         <AuthorizeView>
             <Authorized>
                 <nav>
+                    @if (ClubAccess.Enabled) { <NavLink href="clubs">Klubber</NavLink> }
                     <NavLink href="/" Match="NavLinkMatch.All">Grupper</NavLink>
                     <NavLink href="teams">Lag</NavLink>
                     <NavLink href="report" Match="NavLinkMatch.All">Månedsrapport</NavLink>
                     <NavLink href="report/weeks">Ukerapport</NavLink>
                     <NavLink href="pot">Pott</NavLink>
                     <NavLink href="settings/targets">Månedsmål</NavLink>
+                    @if (context.User.PersonId() == BukStatus.Core.Administration.AdministratorStore.SuperAdminPersonId)
+                    {
+                        <NavLink href="administrators">Administratorer</NavLink>
+                    }
                 </nav>
             </Authorized>
         </AuthorizeView>
@@ -30,6 +37,7 @@
 </header>
 
 <main class="page">
+    <AuthorizeView><Authorized><ClubSelection /></Authorized></AuthorizeView>
     @Body
 </main>
 

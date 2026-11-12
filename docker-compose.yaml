@@ -32,7 +32,11 @@ services:
       Auth__ApiKeys__0: ${API_KEY_BOT:-}
 
       # Optional backup for the pot screen's extra contributions when the BCC API doesn't answer (old PACEFEST source).
-      Myshare__BaseUrl: ${MYSHARE_BASE_URL:-}
+      # Enable after the MyShare bearer is configured and tested. Existing data belongs to BUK Sørlandet.
+      ClubAccess__Enabled: ${MYSHARE_CLUB_ACCESS_ENABLED:-false}
+      ClubAccess__LegacyClubId: ${MYSHARE_LEGACY_CLUB_ID:-4050}
+      ClubAccess__ApiPersonId: ${MYSHARE_API_PERSON_ID:-0}
+      Myshare__BaseUrl: ${MYSHARE_BASE_URL:-https://myshare-admin-api-prod-2ymy6hgl7q-ew.a.run.app/api/}
       Myshare__Bearer: ${MYSHARE_BEARER:-}
       Myshare__ClubId: ${MYSHARE_CLUB_ID:-0}
 

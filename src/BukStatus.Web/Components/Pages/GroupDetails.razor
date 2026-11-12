@@ -1,5 +1,6 @@
 @page "/groups/{GroupId:int}"
 @rendermode InteractiveServer
+@inject BukStatus.Core.Clubs.IClubContext Clubs
 @inject GroupService Groups
 @inject GroupStatusService GroupStatuses
 @inject NavigationManager Navigation
@@ -60,8 +61,11 @@ else
     }
 
     <form class="inline-form add-member" @onsubmit="AddMember">
-        <input type="number" min="1" @bind="newPersonId" placeholder="Person-ID" aria-label="Person-ID" />
-        <input @bind="newDisplayName" placeholder="Navn (valgfritt)" aria-label="Navn" maxlength="200" />
+        <MemberPicker @bind-Value="newPersonId" />
+        @if (!Clubs.Enabled)
+        {
+            <input @bind="newDisplayName" placeholder="Navn (valgfritt)" aria-label="Navn" maxlength="200" />
+        }
         <button type="submit" class="primary" disabled="@busy">Legg til</button>
     </form>
 
@@ -167,7 +171,7 @@ else
     private async Task AddMember() => await Run(async () =>
     {
         if (newPersonId is not { } personId)
-            throw new GroupException("Fyll inn person-ID.");
+            throw new GroupException("Velg en person fra MyShare.");
         await Groups.AddMemberAsync(GroupId, personId, newDisplayName);
         newPersonId = null;
         newDisplayName = null;

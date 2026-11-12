@@ -1,32 +1,38 @@
+using BukStatus.Core.Clubs;
 using BukStatus.Core.Groups;
 using Microsoft.EntityFrameworkCore;
 
 namespace BukStatus.Core.Teams;
 
 /// <summary>Teams, their members and the monthly target curve.</summary>
-public class TeamService(IDbContextFactory<BukStatusDbContext> dbFactory)
+public class TeamService(IDbContextFactory<BukStatusDbContext> dbFactory, IClubContext? clubContext = null, BukStatus.Core.Administration.IWriteAccess? writeAccess = null)
 {
     public async Task<List<Team>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Teams.AsNoTracking()
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
+        var result = await db.Teams.AsNoTracking()
             .Include(t => t.Members)
             .OrderBy(t => t.SortOrder).ThenBy(t => t.Name)
             .ToListAsync(cancellationToken);
+        foreach (var item in result) await RefreshMembers(item, cancellationToken);
+        return result;
     }
 
     public async Task<Team?> GetAsync(int teamId, CancellationToken cancellationToken = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Teams.AsNoTracking()
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
+        var result = await db.Teams.AsNoTracking()
             .Include(t => t.Members)
             .FirstOrDefaultAsync(t => t.Id == teamId, cancellationToken);
+        if (result is not null) await RefreshMembers(result, cancellationToken);
+        return result;
     }
 
     public async Task<Team> CreateAsync(string name, CancellationToken cancellationToken = default)
     {
+        if (writeAccess is not null) await writeAccess.RequireAsync(cancellationToken);
         name = RequireName(name);
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
         if (await db.Teams.AnyAsync(t => t.Name == name, cancellationToken))
             throw new GroupException($"Det finnes allerede et lag som heter «{name}».");
 
@@ -40,11 +46,12 @@ public class TeamService(IDbContextFactory<BukStatusDbContext> dbFactory)
     public async Task UpdateAsync(int teamId, string name, string? leaderName, decimal bonusPercent,
         CancellationToken cancellationToken = default)
     {
+        if (writeAccess is not null) await writeAccess.RequireAsync(cancellationToken);
         name = RequireName(name);
         if (bonusPercent is < 0 or > 5)
             throw new GroupException("Tillegg må være mellom 0 og 500 %.");
 
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
         var team = await db.Teams.FindAsync([teamId], cancellationToken) ?? throw NotFound(teamId);
         if (await db.Teams.AnyAsync(t => t.Name == name && t.Id != teamId, cancellationToken))
             throw new GroupException($"Det finnes allerede et lag som heter «{name}».");
@@ -57,17 +64,20 @@ public class TeamService(IDbContextFactory<BukStatusDbContext> dbFactory)
 
     public async Task DeleteAsync(int teamId, CancellationToken cancellationToken = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (writeAccess is not null) await writeAccess.RequireAsync(cancellationToken);
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
         await db.Teams.Where(t => t.Id == teamId).ExecuteDeleteAsync(cancellationToken);
     }
 
     public async Task AddMemberAsync(int teamId, int personId, string? displayName,
         CancellationToken cancellationToken = default)
     {
+        if (writeAccess is not null) await writeAccess.RequireAsync(cancellationToken);
+        displayName = await ClubData.RequireMemberAsync(clubContext, personId, displayName, cancellationToken);
         if (personId <= 0)
             throw new GroupException("Person-ID må være et positivt tall.");
 
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
         if (!await db.Teams.AnyAsync(t => t.Id == teamId, cancellationToken))
             throw NotFound(teamId);
 
@@ -84,7 +94,8 @@ public class TeamService(IDbContextFactory<BukStatusDbContext> dbFactory)
 
     public async Task RemoveMemberAsync(int teamId, int personId, CancellationToken cancellationToken = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (writeAccess is not null) await writeAccess.RequireAsync(cancellationToken);
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
         await db.TeamMembers.Where(m => m.TeamId == teamId && m.PersonId == personId).ExecuteDeleteAsync(cancellationToken);
     }
 
@@ -97,6 +108,7 @@ public class TeamService(IDbContextFactory<BukStatusDbContext> dbFactory)
     /// </summary>
     public async Task<ImportResult> ImportAsync(string text, CancellationToken cancellationToken = default)
     {
+        if (writeAccess is not null) await writeAccess.RequireAsync(cancellationToken);
         var rows = new List<(int PersonId, string? Name, string Team)>();
         var errors = new List<string>();
         var lineNumber = 0;
@@ -119,10 +131,11 @@ public class TeamService(IDbContextFactory<BukStatusDbContext> dbFactory)
                 errors.Add($"Linje {lineNumber}: mangler lag.");
                 continue;
             }
-            rows.Add((personId, Clean(parts[1]), parts[2]));
+            var verifiedName = await ClubData.RequireMemberAsync(clubContext, personId, Clean(parts[1]), cancellationToken);
+            rows.Add((personId, verifiedName, parts[2]));
         }
 
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
         var teams = await db.Teams.ToDictionaryAsync(t => t.Name, StringComparer.OrdinalIgnoreCase, cancellationToken);
         var members = await db.TeamMembers.ToDictionaryAsync(m => m.PersonId, cancellationToken);
         int added = 0, moved = 0, unchanged = 0, created = 0;
@@ -166,7 +179,7 @@ public class TeamService(IDbContextFactory<BukStatusDbContext> dbFactory)
     /// <summary>Cumulative target per month (1-12) for the year. Months without a value are left out.</summary>
     public async Task<IReadOnlyDictionary<int, decimal>> GetMonthlyTargetsAsync(int year, CancellationToken cancellationToken = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
         return await db.MonthlyTargets.AsNoTracking()
             .Where(t => t.Year == year)
             .ToDictionaryAsync(t => t.Month, t => t.CumulativePercent, cancellationToken);
@@ -175,6 +188,7 @@ public class TeamService(IDbContextFactory<BukStatusDbContext> dbFactory)
     public async Task SaveMonthlyTargetsAsync(int year, IReadOnlyDictionary<int, decimal> cumulativeByMonth,
         CancellationToken cancellationToken = default)
     {
+        if (writeAccess is not null) await writeAccess.RequireAsync(cancellationToken);
         decimal previous = 0;
         foreach (var month in Enumerable.Range(1, 12))
         {
@@ -185,7 +199,7 @@ public class TeamService(IDbContextFactory<BukStatusDbContext> dbFactory)
             previous = value;
         }
 
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
         var existing = await db.MonthlyTargets.Where(t => t.Year == year).ToDictionaryAsync(t => t.Month, cancellationToken);
         foreach (var (month, value) in cumulativeByMonth)
         {
@@ -195,6 +209,15 @@ public class TeamService(IDbContextFactory<BukStatusDbContext> dbFactory)
                 db.MonthlyTargets.Add(new MonthlyTarget { Year = year, Month = month, CumulativePercent = value });
         }
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task RefreshMembers(Team item, CancellationToken ct)
+    {
+        var scope = clubContext is null ? null : await clubContext.GetSelectedAsync(ct);
+        if (scope is null) return;
+        var members = scope.Club.Members.ToDictionary(m => m.Id);
+        item.Members.RemoveAll(m => !members.ContainsKey(m.PersonId));
+        foreach (var member in item.Members) member.DisplayName = members[member.PersonId].DisplayName;
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

@@ -1,3 +1,4 @@
+using BukStatus.Core.Clubs;
 using System.Globalization;
 using BukStatus.Core.Groups;
 using BukStatus.Core.Status;
@@ -29,18 +30,19 @@ public class PotService(
     GroupService groups,
     IMemberStatusService statuses,
     ExtraContributionsService extraContributions,
-    TimeProvider time)
+    TimeProvider time, IClubContext? clubContext = null, BukStatus.Core.Administration.IWriteAccess? writeAccess = null)
 {
     public DateOnly Today => DateOnly.FromDateTime(time.GetLocalNow().DateTime);
 
     public async Task<PotSettings> GetSettingsAsync(CancellationToken cancellationToken = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
         return await db.PotSettings.AsNoTracking().FirstOrDefaultAsync(cancellationToken) ?? new PotSettings();
     }
 
     public async Task SaveSettingsAsync(PotSettings settings, CancellationToken cancellationToken = default)
     {
+        if (writeAccess is not null) await writeAccess.RequireAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(settings.Title))
             throw new GroupException("Skjermen må ha en overskrift.");
         if (settings.SamvirkPercent is < 0 or > 100)
@@ -60,7 +62,7 @@ public class PotService(
         if (settings.ExtraFrom is { } from && settings.ExtraTo is { } to && to < from)
             throw new GroupException("Til-datoen kan ikke være før fra-datoen.");
 
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
         var row = await db.PotSettings.FirstOrDefaultAsync(cancellationToken);
         if (row is null)
         {
@@ -86,7 +88,8 @@ public class PotService(
     /// <summary>All teams first, then each team, then each group.</summary>
     public async Task<List<PotSource>> GetSourcesAsync(CancellationToken cancellationToken = default)
     {
-        var sources = new List<PotSource> { new(PotSource.AllTeamsKey, "Alle lag") };
+        var scope = clubContext is null ? null : await clubContext.GetSelectedAsync(cancellationToken);
+        var sources = new List<PotSource> { new(PotSource.AllTeamsKey, scope is null ? "Alle lag" : $"Hele {scope.Club.Name}") };
         sources.AddRange((await teams.GetAllAsync(cancellationToken)).Select(t => new PotSource(PotSource.TeamKey(t.Id), $"Lag: {t.Name}")));
         sources.AddRange((await groups.GetAllAsync(cancellationToken)).Select(g => new PotSource(PotSource.GroupKey(g.Id), $"Gruppe: {g.Name}")));
         return sources;
@@ -116,16 +119,26 @@ public class PotService(
     /// The real extra contributions. Everyone on a team or in a group counts as a member, so their own
     /// contributions are never extra, whichever source the screen shows.
     /// </summary>
-    public async Task<ExtraContributionsResult> GetExtraContributionsAsync(PotSettings settings, CancellationToken cancellationToken = default) =>
-        await extraContributions.GetAsync(settings, await GetAllMemberIdsAsync(cancellationToken), Today, cancellationToken);
+    public async Task<ExtraContributionsResult> GetExtraContributionsAsync(PotSettings settings, CancellationToken cancellationToken = default)
+    {
+        var scope = clubContext is null ? null : await clubContext.GetSelectedAsync(cancellationToken);
+        return await extraContributions.GetAsync(settings, await GetAllMemberIdsAsync(cancellationToken), Today, cancellationToken,
+            scope?.Club.Id, scope?.Club.TeamId);
+    }
 
     /// <summary>The extra-contribution sources in the order they're tried, and whether each is set up.</summary>
     public async Task<IReadOnlyList<(string Name, bool Available)>> DescribeExtraSourcesAsync(PotSettings settings,
-        CancellationToken cancellationToken = default) =>
-        extraContributions.Describe(settings.ToQuery(await GetAllMemberIdsAsync(cancellationToken), Today));
+        CancellationToken cancellationToken = default)
+    {
+        var scope = clubContext is null ? null : await clubContext.GetSelectedAsync(cancellationToken);
+        return extraContributions.Describe(settings.ToQuery(await GetAllMemberIdsAsync(cancellationToken), Today)
+            with { ClubId = scope?.Club.Id, TeamId = scope?.Club.TeamId });
+    }
 
     private async Task<HashSet<int>> GetAllMemberIdsAsync(CancellationToken cancellationToken)
     {
+        var scope = clubContext is null ? null : await clubContext.GetSelectedAsync(cancellationToken);
+        if (scope is not null) return scope.Club.Members.Select(m => m.Id).ToHashSet();
         var ids = (await teams.GetAllAsync(cancellationToken)).SelectMany(t => t.Members).Select(m => m.PersonId).ToHashSet();
         ids.UnionWith((await groups.GetAllAsync(cancellationToken)).SelectMany(g => g.Members).Select(m => m.PersonId));
         return ids;
@@ -141,6 +154,11 @@ public class PotService(
         if (TryParseId(sourceKey, "lag-") is { } teamId && await teams.GetAsync(teamId, cancellationToken) is { } team)
             return (new PotSource(PotSource.TeamKey(team.Id), team.Name),
                 team.Members.Select(m => (m.PersonId, m.DisplayName)).ToList());
+
+        var scope = clubContext is null ? null : await clubContext.GetSelectedAsync(cancellationToken);
+        if (scope is not null)
+            return (new PotSource(PotSource.AllTeamsKey, scope.Club.Name),
+                scope.Club.Members.Select(m => (m.Id, (string?)m.DisplayName)).ToList());
 
         var all = await teams.GetAllAsync(cancellationToken);
         return (new PotSource(PotSource.AllTeamsKey, "Alle lag"),

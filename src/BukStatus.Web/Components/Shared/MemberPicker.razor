@@ -1,0 +1,48 @@
+@using BukStatus.Core.Clubs
+@inject IClubContext Clubs
+
+@if (!Clubs.Enabled)
+{
+    <input type="number" min="1" value="@Value" @onchange="Changed" aria-label="Person-ID" placeholder="Person-ID" />
+}
+else if (error is not null)
+{
+    <p class="alert">@error</p>
+}
+else
+{
+    <label>Søk etter person <input @bind="search" @bind:event="oninput" placeholder="Navn eller person-ID" /></label>
+    <label>Person fra @clubName
+        <select value="@Value" @onchange="Changed" aria-label="Velg medlem fra MyShare">
+            <option value="">Velg person …</option>
+            @foreach (var member in members.Where(Matches).OrderBy(m => m.DisplayName))
+            {
+                <option value="@member.Id">@member.DisplayName · @(member.Age(today)?.ToString() ?? "ukjent alder") år · #@member.Id</option>
+            }
+        </select>
+    </label>
+}
+@code {
+    [Parameter] public int? Value { get; set; }
+    [Parameter] public EventCallback<int?> ValueChanged { get; set; }
+    [Parameter] public IEnumerable<int> ExcludedIds { get; set; } = [];
+    private IReadOnlyList<ClubMember> members = [];
+    private string clubName = "MyShare";
+    private string search = "";
+    private string? error;
+    private readonly DateOnly today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "Europe/Oslo").DateTime);
+    private bool Matches(ClubMember m) => !ExcludedIds.Contains(m.Id) && (m.Id == Value || string.IsNullOrWhiteSpace(search)
+        || m.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase) || m.Id.ToString().Contains(search));
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var scope = await Clubs.GetSelectedAsync();
+            if (scope is null) { error = "Aktiver MyShare-klubbtilgang for å hente personvalg."; return; }
+            members = scope.Club.Members;
+            clubName = scope.Club.Name;
+        }
+        catch { error = "Kunne ikke hente medlemmer fra MyShare. Prøv å laste siden på nytt."; }
+    }
+    private Task Changed(ChangeEventArgs e) => ValueChanged.InvokeAsync(int.TryParse(e.Value?.ToString(), out var id) ? id : null);
+}

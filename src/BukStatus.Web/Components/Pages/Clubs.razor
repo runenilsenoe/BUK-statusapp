@@ -1,0 +1,57 @@
+@page "/clubs"
+@using BukStatus.Core.Clubs
+@inject IClubContext ClubContext
+@inject IMemberStatusService Statuses
+
+<PageTitle>Klubber · BUK Status</PageTitle>
+<h1>Mine klubber</h1>
+@if (error is not null)
+{
+    <p class="alert">@error</p>
+}
+@if (clubs is not null)
+{
+    <nav class="actions" aria-label="Velg klubb">
+        @foreach (var club in clubs)
+        {
+            <a class="button" href="@($"clubs/select/{club.Id}")">@club.Name (@club.Members.Count)</a>
+        }
+    </nav>
+}
+@if (selected is not null)
+{
+    <h2>@selected.Name</h2>
+    <p>@selected.Members.Count medlemmer fra MyShare, uavhengig av lokale lag og grupper.</p>
+    <p><a href="teams">Lag i klubben</a> · <a href="pot">Pott</a></p>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Navn</th><th>Alder</th><th>Status</th><th>Bidratt</th><th>Ajour-mål</th></tr></thead>
+        <tbody>
+        @foreach (var member in selected.Members.OrderBy(m => m.DisplayName))
+        {
+            var status = statuses.GetValueOrDefault(member.Id);
+            <tr><td>@member.DisplayName</td><td>@(member.Age(today)?.ToString() ?? "–")</td>
+                <td>@(status is null ? "Ingen status" : status.IsOnTrack ? "Ajour" : "Ikke ajour")</td>
+                <td>@(status is null ? "–" : Format.Kr(status.TotalContribution))</td>
+                <td>@(status is null ? "–" : Format.Kr(status.AjourTarget))</td></tr>
+        }
+        </tbody>
+    </table></div>
+}
+@code {
+    private IReadOnlyList<MyshareClub>? clubs;
+    private MyshareClub? selected;
+    private IReadOnlyDictionary<int, MemberStatusSnapshot> statuses = new Dictionary<int, MemberStatusSnapshot>();
+    private string? error;
+    private readonly DateOnly today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "Europe/Oslo").DateTime);
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            clubs = await ClubContext.GetClubsAsync();
+            selected = (await ClubContext.GetSelectedAsync())?.Club;
+            if (selected is not null) statuses = await Statuses.GetStatusesAsync(selected.Members.Select(m => m.Id));
+            else error = "Klubbtilgang er ikke aktivert.";
+        }
+        catch { error = "Kunne ikke bekrefte klubbtilgang eller hente status fra MyShare/BCC. Prøv igjen senere."; }
+    }
+}

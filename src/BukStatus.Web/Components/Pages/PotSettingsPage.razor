@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @using BukStatus.Core.Pot
 @inject PotService PotService
+@inject BukStatus.Core.Clubs.IClubContext Clubs
 
 <PageTitle>Innstillinger for pott · BUK Status</PageTitle>
 
@@ -38,6 +39,12 @@
                 <input @bind="settings.Milestones" maxlength="100" placeholder="70;75" />
             </label>
         </div>
+        @if (Clubs.Enabled)
+        {
+            <p class="muted">Storskjerm krever innlogging og tilgang til klubben. Bruk «Storskjerm» på Pott-siden.</p>
+        }
+        else
+        {
         <label class="check-row">
             <input type="checkbox" @bind="settings.PublicScreenEnabled" />
             Åpen storskjerm uten innlogging på <a href="skjerm" target="_blank">/skjerm</a>
@@ -48,11 +55,13 @@
             og <code>?fordeling=flest</code> for «Flest mulig ajour».
         </p>
 
+        }
+
         <h2 class="form-section">Ekstrabidrag</h2>
         <p class="muted" style="max-width: 760px;">
             Ekstrabidrag er penger som har kommet inn utenom medlemmenes egne mål, for eksempel gaver fra personer uten
             bidragsplan. Potten fordeles på dem som ikke er ajour. Bidrag fra alle som er på et lag eller i en gruppe
-            regnes aldri som ekstrabidrag.
+            regnes aldri som ekstrabidrag. Ved klubbvisning gjelder dette alle klubbens medlemmer fra MyShare.
         </p>
 
         <div class="radio-row">
@@ -63,10 +72,10 @@
         @if (settings.ExtraMode == ExtraContributionsMode.Automatic)
         {
             <div class="form-grid">
-                <label>
-                    BCC org-ID
-                    <input type="number" min="1" @bind="settings.ExtraOrgId" />
-                </label>
+                @if (!Clubs.Enabled)
+                {
+                    <label>BCC org-ID <input type="number" min="1" @bind="settings.ExtraOrgId" /></label>
+                }
                 <label>
                     Beskrivelsen må inneholde (valgfritt)
                     <input @bind="settings.ExtraDescriptionFilter" maxlength="200" placeholder="f.eks. Donation" />

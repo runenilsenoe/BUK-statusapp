@@ -3,6 +3,7 @@
 @layout Layout.ScreenLayout
 @using BukStatus.Core.Pot
 @inject PotService PotService
+@inject BukStatus.Core.Clubs.IClubContext Clubs
 @inject ILogger<PublicScreen> Logger
 
 @*
@@ -52,6 +53,11 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        if (Clubs.Enabled)
+        {
+            if (HttpContext is not null) HttpContext.Response.StatusCode = 404;
+            return;
+        }
         var settings = await PotService.GetSettingsAsync();
         enabled = settings.PublicScreenEnabled;
         if (!enabled)

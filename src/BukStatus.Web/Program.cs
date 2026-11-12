@@ -1,3 +1,4 @@
+using BukStatus.Core.Clubs;
 using System.Globalization;
 using BukStatus.Core;
 using BukStatus.Core.Groups;
@@ -16,6 +17,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddBukStatusCore(builder.Configuration);
 builder.AddBukAuthentication();
+builder.Services.Configure<ClubAccessOptions>(builder.Configuration.GetSection("ClubAccess"));
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<BukStatus.Core.Administration.AdministratorStore>();
+builder.Services.AddScoped<AdministratorAccess>();
+builder.Services.AddScoped<BukStatus.Core.Administration.IWriteAccess>(sp => sp.GetRequiredService<AdministratorAccess>());
+builder.Services.AddScoped<IClubContext, ClubContext>();
+builder.Services.AddHttpClient<IMyshareDirectory, MyshareDirectory>(c => c.Timeout = TimeSpan.FromSeconds(30))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
@@ -54,6 +63,15 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
+app.Use(async (context, next) =>
+{
+    try { await next(); }
+    catch (UnauthorizedAccessException) when (!context.Response.HasStarted)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsync("Ingen tilgang til valgt klubb.");
+    }
+});
 
 app.MapStaticAssets();
 app.MapHealthChecks("/healthz").AllowAnonymous();
@@ -61,6 +79,7 @@ app.MapAccountEndpoints();
 app.MapGroupApi();
 app.MapTeamApi();
 app.MapPotApi();
+app.MapClubApi();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .RequireAuthorization(AuthSetup.Policy);

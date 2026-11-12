@@ -30,7 +30,7 @@ public record ExtraContributionsQuery(
     string? DescriptionFilter,
     DateOnly From,
     DateOnly To,
-    IReadOnlySet<int> ExcludedPersonIds);
+    IReadOnlySet<int> ExcludedPersonIds, int? ClubId = null, int? TeamId = null);
 
 /// <param name="Source">Human-readable source, shown on the page.</param>
 /// <param name="Warning">Set when a source failed and a backup was used.</param>
@@ -62,21 +62,21 @@ public class ExtraContributionsService(
 
     /// <summary>The sources in the order they're tried, and whether each can handle the query.</summary>
     public IReadOnlyList<(string Name, bool Available)> Describe(ExtraContributionsQuery query) =>
-        _sources.Select(s => (s.Name, s.CanHandle(query))).ToList();
+        _sources.Select(s => (s.Name, s.CanHandle(query) && (query.ClubId is null || s is MyshareExtraContributionsSource))).ToList();
 
     public async Task<ExtraContributionsResult> GetAsync(PotSettings settings, IReadOnlySet<int> memberIds,
-        DateOnly today, CancellationToken cancellationToken = default)
+        DateOnly today, CancellationToken cancellationToken = default, int? clubId = null, int? teamId = null)
     {
         if (settings.ExtraMode == ExtraContributionsMode.Manual)
             return Manual(settings, null);
 
-        var query = settings.ToQuery(memberIds, today);
+        var query = settings.ToQuery(memberIds, today) with { ClubId = clubId, TeamId = teamId };
         var key = CacheKey(query);
         if (cache.TryGetValue(key, out ExtraContributionsResult? cached) && cached is not null)
             return cached;
 
         var failures = new List<string>();
-        foreach (var source in _sources.Where(s => s.CanHandle(query)))
+        foreach (var source in _sources.Where(s => s.CanHandle(query) && (query.ClubId is null || s is MyshareExtraContributionsSource)))
         {
             try
             {
@@ -116,7 +116,7 @@ public class ExtraContributionsService(
         new(settings.ExtraContributions, 0, "lagt inn manuelt", false, warning);
 
     private static string CacheKey(ExtraContributionsQuery q) =>
-        $"extra:{q.OrgId}:{q.DescriptionFilter}:{q.From:O}:{q.To:O}:{string.Join(',', q.ExcludedPersonIds.Order())}";
+        $"extra:{q.ClubId}:{q.TeamId}:{q.OrgId}:{q.DescriptionFilter}:{q.From:O}:{q.To:O}:{string.Join(',', q.ExcludedPersonIds.Order())}";
 }
 
 /// <summary>Contributions to an org from the BCC Contributions API (the contributions endpoint).</summary>
@@ -177,15 +177,17 @@ public class MyshareExtraContributionsSource(IHttpClientFactory httpClientFactor
 
     public string Name => "myshare";
 
-    public bool CanHandle(ExtraContributionsQuery query) => _options.IsConfigured;
+    public bool CanHandle(ExtraContributionsQuery query) => !string.IsNullOrWhiteSpace(_options.Bearer)
+        && Uri.IsWellFormedUriString(_options.BaseUrl, UriKind.Absolute) && (query.ClubId ?? _options.ClubId) > 0;
 
     public async Task<IReadOnlyList<ExtraContribution>> GetAsync(ExtraContributionsQuery query, CancellationToken cancellationToken)
     {
-        var url = $"{_options.BaseUrl.TrimEnd('/')}/ClubTransactions/?clubId={_options.ClubId.ToString(CultureInfo.InvariantCulture)}"
+        var url = $"{_options.BaseUrl.TrimEnd('/')}/ClubTransactions/?clubId={(query.ClubId ?? _options.ClubId).ToString(CultureInfo.InvariantCulture)}"
                   + $"&fromDate={QueryDate(query.From.ToDateTime(TimeOnly.MinValue))}"
                   + $"&toDate={QueryDate(query.To.ToDateTime(new TimeOnly(23, 59, 59)))}";
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.Bearer);
+        if (query.TeamId is { } teamId) request.Headers.Add("TeamId", teamId.ToString(CultureInfo.InvariantCulture));
         using var response = await httpClientFactory.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
 
