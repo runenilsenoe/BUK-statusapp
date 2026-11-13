@@ -35,6 +35,7 @@ public sealed class AdministratorAccess(IHttpContextAccessor http, Authenticatio
             || user.PersonId() != AdministratorStore.SuperAdminPersonId) throw new UnauthorizedAccessException();
         return AdministratorStore.SuperAdminPersonId;
     }
+    public async Task RequireSuperAdminAsync() => _ = await SuperAdminAsync();
     public async Task<List<Administrator>> GetAllAsync() => await store.GetAllAsync(await SuperAdminAsync());
     public async Task AddAsync(int personId, string? name) => await store.AddAsync(await SuperAdminAsync(), personId, name);
     public async Task RemoveAsync(int personId) => await store.RemoveAsync(await SuperAdminAsync(), personId);

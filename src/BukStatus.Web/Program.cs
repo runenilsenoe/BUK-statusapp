@@ -21,6 +21,9 @@ builder.Services.Configure<ClubAccessOptions>(builder.Configuration.GetSection("
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<BukStatus.Core.Administration.AdministratorStore>();
 builder.Services.AddScoped<AdministratorAccess>();
+builder.Services.AddScoped<BukStatus.Web.Diagnostics.BccDiagnostics>();
+builder.Services.AddHttpClient("BccDiagnostics", c => c.Timeout = TimeSpan.FromSeconds(15))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped<BukStatus.Core.Administration.IWriteAccess>(sp => sp.GetRequiredService<AdministratorAccess>());
 builder.Services.AddScoped<IClubContext, ClubContext>();
 builder.Services.AddHttpClient<IMyshareDirectory, MyshareDirectory>(c => c.Timeout = TimeSpan.FromSeconds(30))

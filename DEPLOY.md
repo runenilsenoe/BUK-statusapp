@@ -120,3 +120,39 @@ I klubbmodus kan vanlige brukere lese klubbene MyShare gir tilgang til. Administ
 lag, grupper, import, månedsmål og pottinnstillinger i disse klubbene. Superadministrator- og
 administratorrollen overstyrer **ikke** MyShare-teamtilgang. Før klubbmodus aktiveres beholdes
 skriverettene til de tidligere eksplisitt tillatte brukerne og maskinnøklene.
+
+## BCC-datatest (13. november 2026)
+
+Superadministrator 21410 kan åpne `/diagnostics/bcc` og velge **Kjør datatest**.
+Testen bruker appens eksisterende `BccApi`-klient med separate lesescopes, faste API-adresser
+fra BCC SDK og maksimalt 120 sekunder per kjøring. Den endrer ingen appdata eller upstream-data.
+API-nøkler og andre administratorer får ikke kjøre den. Token og rå feilmeldinger vises ikke.
+Fødselsdato vises bare som tilgjengelig/mangler. Utvalg av bidrag og tilgangsdata vises kun her.
+Resultatene blir ikke lagret; de vises i den innloggede nettleserøkten.
+
+Gjennomgåtte kilder: https://api.bcc.no/core/swagger.json og
+https://api.bcc.no/contributions/swagger.json (samt Swagger UI i utviklerportalen).
+
+- Core: persons inneholder navn, personID, UID, birthDate og churchUid. Affiliations har
+  personUid, orgUid, type, isActive og gyldighetsdatoer. Orgs har UID og numerisk orgID.
+- Core: groups, group members og checkGroupMemberships beskriver gruppemedlemskap.
+  Rollenavn og roleAssignments finnes også, men er ikke i seg selv bekreftet MyShare-tilgang.
+  Consents, legalBases, relations, countries og anonym statistikk er ikke nødvendige for BUK-status.
+- Contributions: TeamConfig har teamID, teamName, orgIDsWithAccess og userIDsWithAccess.
+  Dette er en mulig offisiell kilde for MyShare-teamtilgang; organisasjonsbasert tilgang må
+  vurderes sammen med aktive tilknytninger og bekreftes med ekte svar.
+- Contributions: ClubOrgMapping er mulig kobling mellom klubb og Core-organisasjon.
+  Swagger deklarerer en ContributionReadCollectionResponse som svar; dette fremstår som
+  upresist og må avklares fra faktisk respons. Diagnostikken viser feltnavn og et filtrert utvalg.
+- Contributions: memberStatus, batch, memberClubContributions og status history dekker status
+  og sesonghistorikk. Contributions dekker generelle bidrag. Targets/AllTargets, Projects,
+  Registrations og Milestones finnes også; disse utgjør ingen entydig komplett medlemsliste.
+- Action-endepunktene gir spesialiserte statusoversikter og projeksjoner. Disse brukes ikke
+  som autoritativt medlemsregister eller tilgangsliste.
+
+Swagger har også scope-avvik: group members oppgir persons.groups#read som ikke står i den
+annonserte scope-listen, og roleAssignments-listen oppgir persons.persons.role_assignments#read.
+Diagnostikken tester dokumentert medlems-scope uten å endre produksjonens vanlige scopes.
+HTTP 400 kan bety at Core-filteret må tilpasses; HTTP 200 med et lite utvalg beviser verken
+fullstendig medlemsliste eller at en Core-gruppe tilsvarer MyShare-klubb 4050/6817.
+Ingen overgang til Core som tilgangsregister gjøres automatisk basert på testen.

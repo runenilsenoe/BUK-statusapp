@@ -1,0 +1,49 @@
+@page "/diagnostics/bcc"
+@rendermode InteractiveServer
+@using BukStatus.Web.Diagnostics
+@inject BukStatus.Web.Auth.AdministratorAccess Access
+@inject BccDiagnostics Diagnostics
+
+<PageTitle>API-test · BUK Status</PageTitle>
+<h1>Test BCC-data</h1>
+@if (authorized)
+{
+    <p>Tester BCC-klienten som er konfigurert i denne appen. Testen leser data og endrer ingen lag eller innstillinger.</p>
+    <p>Personoppslag gjelder din person-ID 21410. Andre oppslag viser et begrenset utvalg fra klientens tilgjengelige organisasjoner. Utvalgene er ikke komplette medlemslister.</p>
+    <button class="primary" disabled="@busy" @onclick="Run">@(busy ? "Tester API-et …" : "Kjør datatest")</button>
+    @if (ranAt is not null) { <p>Sist kjørt: @ranAt</p> }
+    @if (results is not null)
+    {
+        <p>Et vellykket svar bekrefter at endepunktet kan leses. Det bekrefter ikke at Core-medlemskap og MyShare-klubber er identiske. TeamConfig og ClubOrgMapping må sammenholdes med riktig organisasjon.</p>
+        @foreach (var result in results)
+        {
+            <section class="card">
+                <h2>@result.Name: @result.Result</h2>
+                <p>HTTP @(result.HttpStatus?.ToString() ?? "–") · Antall i svaret: @(result.Count?.ToString() ?? "–")</p>
+                <p><code>@result.Path</code></p>
+                <p>Lesetilganger: <code>@result.Scope</code></p>
+                <pre style="white-space:pre-wrap;overflow-wrap:anywhere">@result.Summary</pre>
+            </section>
+        }
+    }
+}
+@if (error is not null) { <p class="alert">@error</p> }
+@code {
+    bool authorized, busy;
+    string? error;
+    DateTimeOffset? ranAt;
+    List<ApiProbeResult>? results;
+    protected override async Task OnInitializedAsync()
+    {
+        try { await Access.RequireSuperAdminAsync(); authorized = true; }
+        catch (UnauthorizedAccessException) { error = "Kun superadministrator har tilgang til API-testen."; }
+    }
+    async Task Run()
+    {
+        busy = true; error = null;
+        try { results = await Diagnostics.RunAsync(); ranAt = DateTimeOffset.Now; }
+        catch (UnauthorizedAccessException) { authorized = false; results = null; error = "Kun superadministrator har tilgang til API-testen."; }
+        catch { results = null; error = "Testen kunne ikke fullføres. Prøv igjen senere."; }
+        finally { busy = false; }
+    }
+}
