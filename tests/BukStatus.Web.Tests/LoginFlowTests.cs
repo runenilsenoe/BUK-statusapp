@@ -38,6 +38,7 @@ public sealed class LoginFlowTests : IDisposable
             host.UseSetting("ConnectionStrings:BukStatus", $"Data Source={_dbPath}");
             host.UseSetting("BccApi:UseFakeData", "true");
             host.UseSetting("Auth:AllowedPersonIds:0", AllowedPersonId);
+            host.UseSetting("Auth:ApiKeys:0", "samvirk-test-key");
             host.UseSetting("Auth:ClientId", "test-client");
             host.UseSetting("Auth:ClientSecret", "test-secret");
             host.ConfigureServices(services => services.PostConfigure<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme, oidc =>
@@ -87,6 +88,31 @@ public sealed class LoginFlowTests : IDisposable
         if (cookie is not null)
             request.Headers.Add("Cookie", cookie);
         return _client.SendAsync(request);
+    }
+
+    [Fact]
+    public async Task Samvirk_machine_bridge_requires_preview_and_confirmation_and_blocks_cookie_calls()
+    {
+        var forbidden = await Send(HttpMethod.Get, "/api/samvirk/latest", LoginCookie("21410"));
+        Assert.NotEqual(HttpStatusCode.OK, forbidden.StatusCode);
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent("2026-01-10"), "date");
+        content.Add(new StringContent("BCC Person ID;Display Name;Church Id;Coins 2027-03\n1;Synthetic;49;0"), "file", "sample.csv");
+        using var upload = new HttpRequestMessage(HttpMethod.Post, "/api/samvirk/preview") { Content = content };
+        upload.Headers.Add("X-Api-Key", "samvirk-test-key");
+        var previewResponse = await _client.SendAsync(upload);
+        Assert.Equal(HttpStatusCode.OK, previewResponse.StatusCode);
+        using var preview = System.Text.Json.JsonDocument.Parse(await previewResponse.Content.ReadAsStringAsync());
+        var id = preview.RootElement.GetProperty("id").GetGuid();
+        Assert.Equal("2027-03", preview.RootElement.GetProperty("months")[0].GetString());
+        using var confirm = new HttpRequestMessage(HttpMethod.Post, $"/api/samvirk/confirm/{id}");
+        confirm.Headers.Add("X-Api-Key", "samvirk-test-key");
+        Assert.Equal(HttpStatusCode.OK, (await _client.SendAsync(confirm)).StatusCode);
+        using var latest = new HttpRequestMessage(HttpMethod.Get, "/api/samvirk/latest");
+        latest.Headers.Add("X-Api-Key", "samvirk-test-key");
+        var result = await _client.SendAsync(latest);
+        Assert.Equal(HttpStatusCode.OK, result.StatusCode);
+        Assert.Contains("Synthetic", await result.Content.ReadAsStringAsync());
     }
 
     [Theory]

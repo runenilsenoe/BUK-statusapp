@@ -7,6 +7,7 @@ namespace BukStatus.Core.Groups;
 public class BukStatusDbContext(DbContextOptions<BukStatusDbContext> options) : DbContext(options)
 {
     public DbSet<BukStatus.Core.Administration.Administrator> Administrators => Set<BukStatus.Core.Administration.Administrator>();
+    public DbSet<BukStatus.Core.Samvirk.SamvirkImport> SamvirkImports => Set<BukStatus.Core.Samvirk.SamvirkImport>();
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
     public DbSet<Team> Teams => Set<Team>();
@@ -19,6 +20,8 @@ public class BukStatusDbContext(DbContextOptions<BukStatusDbContext> options) : 
         modelBuilder.Entity<BukStatus.Core.Administration.Administrator>().HasKey(a => a.PersonId);
         modelBuilder.Entity<BukStatus.Core.Administration.Administrator>().Property(a => a.PersonId).ValueGeneratedNever();
         modelBuilder.Entity<BukStatus.Core.Administration.Administrator>().Property(a => a.DisplayName).HasMaxLength(200);
+
+        modelBuilder.Entity<BukStatus.Core.Samvirk.SamvirkImport>().HasIndex(i => new { i.Hash, i.SnapshotDate }).IsUnique();
 
         modelBuilder.Entity<Team>(team =>
         {

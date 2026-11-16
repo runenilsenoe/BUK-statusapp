@@ -138,6 +138,37 @@ namespace BukStatus.Core.Groups.Migrations
                     b.ToTable("PotSettings");
                 });
 
+            modelBuilder.Entity("BukStatus.Core.Samvirk.SamvirkImport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Hash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("SnapshotDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Hash", "SnapshotDate")
+                        .IsUnique();
+
+                    b.ToTable("SamvirkImports");
+                });
+
             modelBuilder.Entity("BukStatus.Core.Teams.MonthlyTarget", b =>
                 {
                     b.Property<int>("Id")

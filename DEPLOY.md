@@ -156,3 +156,31 @@ Diagnostikken tester dokumentert medlems-scope uten å endre produksjonens vanli
 HTTP 400 kan bety at Core-filteret må tilpasses; HTTP 200 med et lite utvalg beviser verken
 fullstendig medlemsliste eller at en Core-gruppe tilsvarer MyShare-klubb 4050/6817.
 Ingen overgang til Core som tilgangsregister gjøres automatisk basert på testen.
+
+## Samvirk-import
+
+`/samvirk` lar administratorer laste opp én .xlsx eller semikolonseparert UTF-8 .csv
+(maks 5 MB / 10 000 personer). Velg eksportdato og bekreft forhåndsvisningen.
+Importene lagres som separate øyeblikksbilder i valgt klubbs database; kun bekreftede
+importer vises. Nyeste eksportdato velges uavhengig av opplastingsrekkefølge. Korrigert
+fil på samme dato blir en ny revisjon, mens identisk fil + dato er idempotent.
+Historikken beholdes i SamvirkImports; beløp summeres aldri mellom øyeblikksbilder.
+
+Månedskolonner tolkes dynamisk: `Discount yyyy-MM`, `Coins yyyy-MM`,
+`Remaining 50 coins yyyy-MM` og `Remaining 100 coins yyyy-MM`. Kolonnerekkefølgen
+kan variere. Nye måneder/år støttes uten kodeendring. Rabattverdier som Full, Half
+og ATeam beholdes, og tomme tall er null (ikke 0). Alle NOK-kolonner valideres som
+ desimaltall. Birth Date, On Track Until Date, Setup Date og UNG Period Until Date
+leses som datoer (dd.MM.yyyy / ISO / typet Excel-dato). Ugyldig måned, dato, beløp
+eller duplisert person-ID avviser hele filen før lagring. Øvrige eksportfelter beholdes.
+
+Koblingen er BCC Person ID. Samvirk Church Id er et eget ID-rom; 49 skal ikke
+forveksles med MyShare klubb 4050/6817. I gammel tilgangsmodus forventes menighet
+49 (`Samvirk:LegacyChurchId`). I klubbmodus kreves eksplisitt
+`Samvirk:ClubChurchIds:<clubId>=<churchId>` før import/lesing, og visningen filtreres
+mot valgt klubbs autoriserte medlemsliste. Importen gir aldri ny klubbtilgang.
+
+Telegram-broen bruker eksisterende X-Api-Key med administratorrettighet mot:
+POST `/api/samvirk/preview` (multipart `file`, `date`), POST `/confirm/{id}`,
+GET `/latest`. Disse rutene godtar kun maskin-API-autentisering. Råfilen beholdes ikke;
+normaliserte eksportfelter lagres i SQLite og inngår i backup.

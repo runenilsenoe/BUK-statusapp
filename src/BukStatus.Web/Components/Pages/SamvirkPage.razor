@@ -1,0 +1,63 @@
+@page "/samvirk"
+@rendermode InteractiveServer
+@using BukStatus.Core.Samvirk
+@inject BukStatus.Web.Auth.AdministratorAccess Access
+@inject SamvirkService Service
+<PageTitle>Samvirk · BUK Status</PageTitle>
+<h1>Samvirk</h1>
+@if (authorized)
+{
+    <p>Last opp ukens .xlsx eller semikolonseparerte .csv. Hver import er et øyeblikksbilde; saldoer summeres ikke mellom importene. Månedene leses fra kolonnenavnene.</p>
+    <label>Eksportdato <input type="date" @bind="date" disabled="@busy" /></label>
+    <InputFile OnChange="Upload" accept=".xlsx,.csv" disabled="@busy" />
+    @if (preview is not null)
+    {
+        <p>@preview.People personer · Menighet-ID @preview.ChurchId · Eksportdato @preview.SnapshotDate</p>
+        <p>Måneder: @string.Join(", ", preview.Months)</p>
+        @if (preview.AlreadyImported) { <p>Denne filen er allerede importert for datoen.</p> }
+        else { <button disabled="@busy" @onclick="Confirm">Bekreft import</button> }
+    }
+    @if (latest is not null)
+    {
+        <h2>Siste import: @latest.SnapshotDate</h2>
+        <label>Måned <select @bind="month">@foreach (var m in latest.People.SelectMany(p => p.Months).Select(m => m.Month.ToString("yyyy-MM")).Distinct().Order()) { <option>@m</option> }</select></label>
+        <div style="overflow:auto"><table><thead><tr><th>Navn</th><th>Person-ID</th><th>UNG-status</th><th>On track</th><th>Saldo NOK</th><th>Rabatt</th><th>Coins</th><th>Gjenstår 50 coins NOK</th><th>Gjenstår 100 coins NOK</th></tr></thead>
+        <tbody>@foreach (var person in latest.People.OrderBy(p => p.Name))
+        {
+            var period = person.Months.FirstOrDefault(m => m.Month.ToString("yyyy-MM") == month);
+            <tr><td>@person.Name</td><td>@person.PersonId</td><td>@person.Fields.GetValueOrDefault("UNG Status")</td><td>@person.Fields.GetValueOrDefault("On Track Status")</td><td>@Amount(person.Amounts.GetValueOrDefault("Current Balance NOK"))</td><td>@(period?.Discount ?? "–")</td><td>@Amount(period?.Coins)</td><td>@Amount(period?.Remaining50)</td><td>@Amount(period?.Remaining100)</td></tr>
+        }</tbody></table></div>
+    }
+}
+@if (error is not null) { <p class="alert">@error</p> }
+@code {
+    bool authorized, busy;
+    string? error;
+    DateTime date = DateTime.Today;
+    string month = DateTime.Today.ToString("yyyy-MM");
+    SamvirkPreview? preview;
+    SamvirkSnapshot? latest;
+    static string Amount(decimal? value) => value?.ToString("N0") ?? "–";
+    protected override async Task OnInitializedAsync()
+    {
+        try { await Access.RequireAsync(); authorized = true; latest = await Service.LatestAsync(); }
+        catch (Exception ex) when (ex is GroupException or UnauthorizedAccessException) { error = "Samvirk krever administrator og konfigurert tilgang til menigheten."; }
+    }
+    async Task Upload(InputFileChangeEventArgs args)
+    {
+        busy = true; error = null; preview = null;
+        try { using var bytes = new MemoryStream(); await args.File.OpenReadStream(SamvirkParser.MaxBytes).CopyToAsync(bytes); preview = await Service.PreviewAsync(bytes.ToArray(), args.File.Name, DateOnly.FromDateTime(date)); }
+        catch (GroupException ex) { error = ex.Message; }
+        catch { error = "Filen kunne ikke leses. Kontroller format og størrelse (maks. 5 MB)."; }
+        finally { busy = false; }
+    }
+    async Task Confirm()
+    {
+        if (preview is null) return;
+        busy = true; error = null;
+        try { await Service.ConfirmAsync(preview.Id); preview = null; latest = await Service.LatestAsync(); }
+        catch (GroupException ex) { error = ex.Message; }
+        catch { error = "Importen kunne ikke bekreftes."; }
+        finally { busy = false; }
+    }
+}
