@@ -24,12 +24,14 @@ public sealed class PeopleAndAccessTests : IDisposable
     [Fact] public async Task Roster_is_independent_of_teams_and_notes_are_isolated_by_club()
     {
         Assert.Equal(2, (await people.GetAllAsync()).Count);
-        await people.SaveAsync(1, "  Follow up\nNext week  ", WorkPreference.CommittedJob);
+        await people.SaveAsync(1, "  Follow up\nNext week  ", WorkPreference.CommittedJob, excludedFromCampaign: true);
         var reloaded = new PersonService(factory, directory, gate);
         Assert.Equal("Follow up\nNext week", (await reloaded.GetAllAsync())[0].FollowUp.Note);
         Assert.Equal(WorkPreference.CommittedJob, (await reloaded.GetAllAsync())[0].FollowUp.Preference);
+        Assert.True((await reloaded.GetAllAsync())[0].FollowUp.ExcludedFromCampaign);
         directory.ClubId = 6817;
         Assert.Empty((await people.GetAllAsync())[0].FollowUp.Note);
+        Assert.False((await people.GetAllAsync())[0].FollowUp.ExcludedFromCampaign);
         await people.SaveAsync(1, "Other club", WorkPreference.EmployedSaver);
         directory.ClubId = 4050;
         Assert.Equal("Follow up\nNext week", (await people.GetAllAsync())[0].FollowUp.Note);

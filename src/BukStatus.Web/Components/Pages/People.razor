@@ -4,17 +4,17 @@
 @inject PersonService Service
 <PageTitle>Personer · BUK Status</PageTitle>
 <h1>Personer</h1>
-<p>Alle personer i valgt klubb fra MyShare, uavhengig av lag. Notater og valg er kun synlige for administratorer.</p>
+
 @if (error is not null) { <p role="alert" class="alert">@error</p> }
 @if (people is not null)
 {
     <label>Søk etter navn eller person-ID <input type="search" @bind="search" @bind:event="oninput" disabled="@busy" /></label>
     <p>@Filtered.Count() av @people.Count personer</p>
     <div class="table-wrap"><table>
-        <thead><tr><th>Navn</th><th>Alder</th><th>Person-ID</th><th>Ønske</th><th>Notat</th><th></th></tr></thead>
+        <thead><tr><th>Navn</th><th>Alder</th><th>Person-ID</th><th>Aksjon</th><th>MyShare</th><th>Ønske</th><th>Notat</th><th></th></tr></thead>
         <tbody>@foreach (var person in Filtered)
         {
-            <tr @key="person.Member.Id"><th scope="row">@person.Member.DisplayName</th><td>@(person.Member.Age(DateOnly.FromDateTime(DateTime.Today))?.ToString() ?? "–")</td><td>@person.Member.Id</td><td>@(person.FollowUp.Preference is { } p ? WorkPreferences.Labels.GetValueOrDefault(p) : "Ikke valgt")</td><td style="white-space:pre-wrap">@person.FollowUp.Note</td><td><button disabled="@busy" @onclick="() => Edit(person)">Rediger</button></td></tr>
+            <tr @key="person.Member.Id"><th scope="row">@person.Member.DisplayName</th><td>@(person.Member.Age(DateOnly.FromDateTime(DateTime.Today))?.ToString() ?? "–")</td><td>@person.Member.Id</td><td>@(person.FollowUp.ExcludedFromCampaign ? "Teller ikke med" : "Teller med")</td><td>@(person.MyshareCountedInAksjon is { } counted ? (counted ? "Teller med" : "Teller ikke med") : "–")</td><td>@(person.FollowUp.Preference is { } p ? WorkPreferences.Labels.GetValueOrDefault(p) : "Ikke valgt")</td><td style="white-space:pre-wrap">@person.FollowUp.Note</td><td><button disabled="@busy" @onclick="() => Edit(person)">Rediger</button></td></tr>
         }</tbody>
     </table></div>
     @if (editing is not null)
@@ -23,6 +23,7 @@
             <h2 id="edit-person">@editing.Member.DisplayName</h2>
             <form @onsubmit="Save" @onsubmit:preventDefault>
                 <fieldset disabled="@busy"><legend>Arbeid og sparing</legend>
+                    <label style="display:block"><input type="checkbox" @bind="excludedFromCampaign" /> Teller ikke med i aksjonen</label>
                     <InputRadioGroup @bind-Value="preference">
                         <label style="display:block"><InputRadio Value="@((WorkPreference?)null)" /> Ikke valgt</label>
                         @foreach (var option in WorkPreferences.Labels)
@@ -46,7 +47,7 @@
     string search = "", note = "";
     string? error, saved;
     WorkPreference? preference;
-    bool busy;
+    bool busy, excludedFromCampaign;
     IEnumerable<PersonOverview> Filtered => (people ?? []).Where(p => string.IsNullOrWhiteSpace(search) || p.Member.DisplayName.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase) || p.Member.Id.ToString().Contains(search.Trim()));
     protected override async Task OnInitializedAsync()
     {
@@ -54,15 +55,15 @@
         catch (GroupException ex) { error = ex.Message; }
         catch { error = "Personlisten kunne ikke hentes. Kontroller MyShare-tilgang og valgt klubb."; }
     }
-    void Edit(PersonOverview person) { editing = person; note = person.FollowUp.Note; preference = person.FollowUp.Preference; saved = null; error = null; }
+    void Edit(PersonOverview person) { editing = person; note = person.FollowUp.Note; excludedFromCampaign = person.FollowUp.ExcludedFromCampaign; preference = person.FollowUp.Preference; saved = null; error = null; }
     async Task Save()
     {
         if (editing is null) return;
         busy = true; error = null; saved = null;
         try
         {
-            await Service.SaveAsync(editing.Member.Id, note, preference);
-            editing.FollowUp.Note = note.Trim(); editing.FollowUp.Preference = preference;
+            await Service.SaveAsync(editing.Member.Id, note, preference, excludedFromCampaign: excludedFromCampaign);
+            editing.FollowUp.ExcludedFromCampaign = excludedFromCampaign; editing.FollowUp.Note = note.Trim(); editing.FollowUp.Preference = preference;
             saved = $"Lagret for {editing.Member.DisplayName}."; editing = null;
         }
         catch (GroupException ex) { error = ex.Message; }

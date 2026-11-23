@@ -1,4 +1,5 @@
 using BukStatus.Core.Clubs;
+using BukStatus.Core.Samvirk;
 using System.Globalization;
 using BukStatus.Core.Groups;
 using BukStatus.Core.Status;
@@ -26,7 +27,9 @@ public record PotSource(string Key, string Name)
 /// <param name="Simulated">The made-up amount added on top of the real extra contributions.</param>
 public record PotScreen(PotSource Source, PotSettings Settings, ExtraContributionsResult Extra, decimal Simulated, PotResult Result)
 {
-    public decimal CombinedPercent => Result.CombinedPercent(Settings.SamvirkPercent);
+    public SamvirkProgress? Samvirk { get; init; }
+    public decimal? SamvirkPercent => Samvirk is null ? Settings.SamvirkPercent : Samvirk.Percent;
+    public decimal? CombinedPercent => Result.Count > 0 && SamvirkPercent is { } percent ? Result.CombinedPercent(percent) : null;
 }
 
 /// <summary>Settings for and data behind the pot screen.</summary>
@@ -36,7 +39,7 @@ public class PotService(
     GroupService groups,
     IMemberStatusService statuses,
     ExtraContributionsService extraContributions,
-    TimeProvider time, IClubContext? clubContext = null, BukStatus.Core.Administration.IWriteAccess? writeAccess = null, IPotRoster? roster = null)
+    TimeProvider time, IClubContext? clubContext = null, BukStatus.Core.Administration.IWriteAccess? writeAccess = null, IPotRoster? roster = null, IMyshareDirectory? myshare = null)
 {
     public DateOnly Today => DateOnly.FromDateTime(time.GetLocalNow().DateTime);
 
@@ -108,6 +111,19 @@ public class PotService(
     {
         var settings = await GetSettingsAsync(cancellationToken);
         var (source, members) = await GetMembersAsync(sourceKey, cancellationToken);
+        var scope = await GetScopeAsync(cancellationToken);
+        var campaign = scope is null || myshare is null ? null : await myshare.GetCampaignAsync(scope, Today, cancellationToken);
+        var campaignById = campaign?.ToDictionary(p => p.PersonId);
+        var rosterById = scope?.Club.Members.ToDictionary(m => m.Id);
+        await using var centralDb = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var excluded = scope is null ? new HashSet<int>() : (await centralDb.PersonFollowUps.AsNoTracking()
+            .Where(p => p.ClubId == scope.Club.Id && p.ExcludedFromCampaign).Select(p => p.PersonId).ToListAsync(cancellationToken)).ToHashSet();
+        members = members.Where(m => !excluded.Contains(m.PersonId)
+            && (campaignById is null || campaignById.TryGetValue(m.PersonId, out var participant)
+                && participant.IsCountedInAksjon == true))
+            .Select(m => (m.PersonId, DisplayName: FirstName(rosterById?.GetValueOrDefault(m.PersonId)?.DisplayName,
+                campaignById?.GetValueOrDefault(m.PersonId)?.Name, m.DisplayName))).ToList();
+        var samvirkMemberIds = members.Select(m => m.PersonId).ToArray();
         var statusTask = statuses.GetStatusesAsync(members.Select(m => m.PersonId), cancellationToken);
         var extraTask = GetExtraContributionsAsync(settings, cancellationToken);
         var memberStatuses = await statusTask;
@@ -115,10 +131,15 @@ public class PotService(
 
         simulated = Math.Max(0, simulated);
         var result = PotSimulator.Simulate(
-            members.Select(m => new PotMember(m.PersonId, m.DisplayName, memberStatuses.GetValueOrDefault(m.PersonId))),
+            members.Where(m => campaignById is null || campaignById.GetValueOrDefault(m.PersonId)?.TargetAmount > 0).Select(m => new PotMember(m.PersonId, m.DisplayName, memberStatuses.GetValueOrDefault(m.PersonId))),
             extra.Amount + simulated,
             strategy);
-        return new PotScreen(source, settings, extra, simulated, result);
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
+        var snapshot = await SamvirkService.ReadLatestAsync(db, cancellationToken);
+        return new PotScreen(source, settings, extra, simulated, result)
+        {
+            Samvirk = snapshot is null ? null : SamvirkProgress.Build(snapshot, samvirkMemberIds)
+        };
     }
 
     /// <summary>
@@ -178,6 +199,8 @@ public class PotService(
         var selected = clubContext is null ? null : await clubContext.GetSelectedAsync(ct);
         return selected ?? (roster is null ? null : await roster.GetAsync(ct));
     }
+
+    private static string? FirstName(params string?[] names) => names.FirstOrDefault(n => !string.IsNullOrWhiteSpace(n));
 
     private static int? TryParseId(string? key, string prefix) =>
         key is not null && key.StartsWith(prefix, StringComparison.Ordinal)

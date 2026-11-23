@@ -88,18 +88,23 @@ public sealed class SamvirkService(IDbContextFactory<BukStatusDbContext> factory
     {
         await ChurchAsync(ct);
         await using var db = await factory.OpenForClubAsync(clubs, ct);
-        // DateTimeOffset sorting is not supported by SQLite: snapshot date first, revisions in memory.
-        var date = await db.SamvirkImports.Where(i => i.ConfirmedAt != null).MaxAsync(i => (DateOnly?)i.SnapshotDate, ct);
-        if (date is null) return null;
-        var imports = await db.SamvirkImports.AsNoTracking().Where(i => i.ConfirmedAt != null && i.SnapshotDate == date).ToListAsync(ct);
-        var latest = imports.OrderByDescending(i => i.SnapshotDate).ThenByDescending(i => i.ConfirmedAt).FirstOrDefault();
-        if (latest is null) return null;
-        var people = JsonSerializer.Deserialize<SamvirkPerson[]>(latest.DataJson)!;
+        var snapshot = await ReadLatestAsync(db, ct);
+        if (snapshot is null) return null;
+        var people = snapshot.People;
         if (await clubs.GetSelectedAsync(ct) is { } scope)
         {
             var ids = scope.Club.Members.Select(m => m.Id).ToHashSet();
             people = people.Where(p => ids.Contains(p.PersonId)).ToArray();
         }
-        return new(latest.SnapshotDate, latest.ConfirmedAt!.Value, people);
+        return snapshot with { People = people };
     }
+    internal static async Task<SamvirkSnapshot?> ReadLatestAsync(BukStatusDbContext db, CancellationToken ct)
+    {
+        var date = await db.SamvirkImports.Where(i => i.ConfirmedAt != null).MaxAsync(i => (DateOnly?)i.SnapshotDate, ct);
+        if (date is null) return null;
+        var revisions = await db.SamvirkImports.AsNoTracking().Where(i => i.ConfirmedAt != null && i.SnapshotDate == date).ToListAsync(ct);
+        var latest = revisions.OrderByDescending(i => i.ConfirmedAt).ThenByDescending(i => i.UploadedAt).First();
+        return new(latest.SnapshotDate, latest.ConfirmedAt!.Value, JsonSerializer.Deserialize<SamvirkPerson[]>(latest.DataJson)!);
+    }
+
 }

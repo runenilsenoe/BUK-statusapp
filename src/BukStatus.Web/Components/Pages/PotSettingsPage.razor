@@ -1,15 +1,16 @@
 @page "/settings/pot"
+@page "/settings/oversikt"
 @rendermode InteractiveServer
 @using BukStatus.Core.Pot
 @inject PotService PotService
 @inject BukStatus.Core.Clubs.IClubContext Clubs
 
-<PageTitle>Innstillinger for pott · BUK Status</PageTitle>
+<PageTitle>Innstillinger for oversikt · BUK Status</PageTitle>
 
-<p><a href="pot">← Pott</a></p>
+<p><a href="oversikt">← Oversikt</a></p>
 
 <div class="page-header">
-    <h1>Innstillinger for pott</h1>
+    <h1>Innstillinger for oversikt</h1>
 </div>
 
 @if (error is not null)
@@ -31,7 +32,7 @@
                 <input @bind="settings.Subtitle" maxlength="200" placeholder="f.eks. sorlandet.donationbuk.no" />
             </label>
             <label>
-                Samvirk ajour (%)
+                Samvirk ajour uten import (%)
                 <input type="number" min="0" max="100" step="any" @bind="settings.SamvirkPercent" />
             </label>
             <label>
@@ -41,7 +42,7 @@
         </div>
         @if (Clubs.Enabled)
         {
-            <p class="muted">Storskjerm krever innlogging og tilgang til klubben. Bruk «Storskjerm» på Pott-siden.</p>
+            <p class="muted">Storskjerm krever innlogging og tilgang til klubben. Bruk «Storskjerm» på Oversikt-siden.</p>
         }
         else
         {

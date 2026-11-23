@@ -1,4 +1,5 @@
 @page "/pot"
+@page "/oversikt"
 @rendermode InteractiveServer
 @implements IAsyncDisposable
 @using BukStatus.Core.Pot
@@ -7,12 +8,11 @@
 @inject IJSRuntime JS
 @inject ILogger<Pot> Logger
 
-<PageTitle>Pott · BUK Status</PageTitle>
+<PageTitle>Oversikt · BUK Status</PageTitle>
 
 <div class="pot @(bigScreen ? "pot-big" : "")">
     <div class="page-header">
-        <h1>Pott@(screen is null ? "" : $": {screen.Source.Name}")</h1>
-        <p class="muted">Uten valg av lag eller gruppe gjelder potten alle i klubben, også personer uten lag.</p>
+        <h1>Oversikt@(screen is null ? "" : $": {screen.Source.Name}")</h1>
         <div class="actions">
             <select @bind="sourceKey" @bind:after="SourceChanged" aria-label="Hvem skjermen gjelder">
                 @foreach (var source in sources)
@@ -23,7 +23,7 @@
             <button type="button" @onclick="ToggleBigScreen">@(bigScreen ? "Avslutt storskjerm" : "Storskjerm")</button>
             @if (!bigScreen)
             {
-                <a class="button" href="settings/pot">Innstillinger</a>
+                <a class="button" href="settings/oversikt">Innstillinger</a>
             }
         </div>
     </div>
@@ -37,7 +37,7 @@
     {
         <section class="pot-controls">
             <label class="pot-slider">
-                <span>Simulere pott (i tillegg til faktiske ekstrabidrag)</span>
+                <span>Simuler ekstra pott</span>
                 <input type="range" min="0" max="@SliderMax" step="@SliderStep" @bind="simulated" @bind:after="Load" />
             </label>
             <label>

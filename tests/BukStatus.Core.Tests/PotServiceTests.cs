@@ -1,4 +1,7 @@
 using BukStatus.Core.Groups;
+using BukStatus.Core.Samvirk;
+using BukStatus.Core.People;
+using System.Text.Json;
 using BukStatus.Core.Clubs;
 using BukStatus.Core.Pot;
 using BukStatus.Core.Status;
@@ -166,6 +169,63 @@ public sealed class PotServiceTests : IDisposable
         Assert.Equal(4, result.Result.Count);
         Assert.Equal(100, result.Extra.Amount); Assert.Equal(1, result.Extra.Count);
     }
+    [Fact]
+    public async Task Imported_samvirk_uses_latest_confirmed_export_and_selected_people()
+    {
+        var team = await _teams.CreateAsync("A");
+        await _teams.AddMemberAsync(team.Id, 1, "One");
+        await _teams.AddMemberAsync(team.Id, 2, "Two");
+        await _teams.AddMemberAsync(team.Id, 3, "Three");
+        SamvirkPerson Person(int id, bool active, string? status) => new(id, $"Name {id}", 49, null,
+            new() { ["Active BUK Drive"] = active.ToString(), ["On Track Status"] = status }, new(), new(), []);
+        async Task Import(DateOnly date, DateTimeOffset? confirmed, SamvirkPerson[] people)
+        {
+            await using var db = _factory.CreateDbContext();
+            db.SamvirkImports.Add(new() { Id = Guid.NewGuid(), Hash = Guid.NewGuid().ToString(), SnapshotDate = date,
+                ConfirmedAt = confirmed, DataJson = JsonSerializer.Serialize(people) });
+            await db.SaveChangesAsync();
+        }
+        var date = new DateOnly(2026, 11, 10);
+        await _pot.SaveSettingsAsync(new() { Title = "Test", SamvirkPercent = 17 });
+        Assert.Equal(17m, (await _pot.GetScreenAsync(null, 0, PotStrategy.Even)).SamvirkPercent);
+        await Import(date.AddDays(-1), DateTimeOffset.UtcNow, [Person(1, true, "NotOnTrack")]);
+        await Import(date, DateTimeOffset.UtcNow, [Person(1, true, "OnTrack"), Person(2, true, "NotOnTrack"), Person(3, false, "OnTrack"), Person(999, true, "OnTrack")]);
+        await Import(date.AddDays(1), null, [Person(1, true, "NotOnTrack")]);
+        var screen = await _pot.GetScreenAsync(null, 0, PotStrategy.Even);
+        Assert.Equal(50m, screen.SamvirkPercent);
+        Assert.Equal(date, screen.Samvirk!.SnapshotDate);
+        Assert.Equal(2, screen.Samvirk.ActiveCount);
+        Assert.Equal((screen.Result.OnTrackWithPotPercent + 50) / 2, screen.CombinedPercent);
+        var group = await _groups.CreateAsync("Single"); await _groups.AddMemberAsync(group.Id, 1, null);
+        Assert.Equal(100m, (await _pot.GetScreenAsync(PotSource.GroupKey(group.Id), 0, PotStrategy.Even)).SamvirkPercent);
+        await Import(date.AddDays(2), DateTimeOffset.UtcNow, [Person(1, true, null)]);
+        Assert.Null((await _pot.GetScreenAsync(null, 0, PotStrategy.Even)).SamvirkPercent);
+    }
+
+    [Fact]
+    public async Task Campaign_flags_and_local_exclusions_filter_counts_and_names_come_from_roster()
+    {
+        var team = await _teams.CreateAsync("A");
+        for (var id = 1; id <= 4; id++) await _teams.AddMemberAsync(team.Id, id, null);
+        await using (var db = _factory.CreateDbContext())
+        {
+            db.PersonFollowUps.Add(new() { ClubId = 4050, PersonId = 2, ExcludedFromCampaign = true });
+            db.PersonFollowUps.Add(new() { ClubId = 6817, PersonId = 1, ExcludedFromCampaign = true });
+            await db.SaveChangesAsync();
+        }
+        var extra = new ExtraContributionsService([], new MemoryCache(new MemoryCacheOptions()), NullLogger<ExtraContributionsService>.Instance);
+        var pot = new PotService(_factory, _teams, _groups, new FakeMemberStatusService(), extra, TimeProvider.System, roster: new Roster(), myshare: new Campaign());
+        var screen = await pot.GetScreenAsync(PotSource.TeamKey(team.Id), 0, PotStrategy.Even);
+        var member = Assert.Single(screen.Result.Members);
+        Assert.Equal(1, member.PersonId); Assert.Equal("One", member.DisplayName);
+    }
+    private sealed class Campaign : IMyshareDirectory
+    {
+        public Task<IReadOnlyList<MyshareClub>> GetClubsAsync(int personId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<IReadOnlyList<MyshareCampaignMember>?> GetCampaignAsync(ClubScope scope, DateOnly today, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<MyshareCampaignMember>?>([new(1, "Api one", true, 1000), new(2, "Two", true, 1000), new(3, "Three", false, 1000), new(4, "Four", true, 0)]);
+    }
+
     private sealed class HttpFactory(string json) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new(new Handler(json));

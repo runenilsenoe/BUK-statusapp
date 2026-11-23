@@ -166,6 +166,7 @@ public class MyshareOptions
     public string BaseUrl { get; set; } = "";
     public string Bearer { get; set; } = "";
     public int ClubId { get; set; }
+    public int SeasonId { get; set; }
 
     public bool IsConfigured =>
         Uri.IsWellFormedUriString(BaseUrl, UriKind.Absolute) && !string.IsNullOrWhiteSpace(Bearer) && ClubId > 0;

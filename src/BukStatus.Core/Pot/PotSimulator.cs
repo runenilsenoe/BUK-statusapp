@@ -71,7 +71,7 @@ public static class PotSimulator
 {
     public static PotResult Simulate(IEnumerable<PotMember> members, decimal pot, PotStrategy strategy)
     {
-        var all = members.ToList();
+        var all = members.Where(m => m.Status is null || m.Status.TotalTarget > 0).ToList();
         var withStatus = all.Where(m => m.Status is not null).ToList();
         pot = Math.Max(0, pot);
 

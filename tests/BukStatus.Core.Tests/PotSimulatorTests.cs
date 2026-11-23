@@ -5,6 +5,17 @@ namespace BukStatus.Core.Tests;
 
 public class PotSimulatorTests
 {
+    [Fact]
+    public void People_without_positive_contribution_plan_have_no_bar_or_share()
+    {
+        var result = PotSimulator.Simulate([
+            new(1, "No plan", new(1, 0, 0, 0, null, 0)),
+            new(2, "Has plan", new(2, 0, 1000, 500, null, 0))], 200, PotStrategy.Even);
+        Assert.Equal(2, Assert.Single(result.Members).PersonId);
+        Assert.Equal(200m, result.PotUsed);
+        Assert.Equal(0, result.MembersWithoutStatus);
+    }
+
     private static PotMember Member(int personId, decimal contributed, decimal ajourTarget) =>
         new(personId, $"P{personId}", new MemberStatusSnapshot(personId, contributed, ajourTarget * 2, ajourTarget, null, 0));
 

@@ -161,6 +161,9 @@ namespace BukStatus.Core.Groups.Migrations
                     b.Property<int>("PersonId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("ExcludedFromCampaign")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Note")
                         .IsRequired()
                         .HasMaxLength(5000)

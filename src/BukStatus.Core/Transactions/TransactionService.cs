@@ -25,7 +25,7 @@ public sealed class TransactionService(IEnumerable<IExtraContributionsSource> so
         var query = new ExtraContributionsQuery(settings.ExtraOrgId, null, from, to, new HashSet<int>(), scope?.Club.Id, scope?.Club.TeamId, IncludeUnassigned: true);
         var eligible = sources.Where(s => s.CanHandle(query) && (scope is null || s is MyshareExtraContributionsSource))
             .OrderBy(s => s is MyshareExtraContributionsSource ? 0 : 1).ToArray();
-        var source = eligible.FirstOrDefault() ?? throw new GroupException("Ingen transaksjonskilde er konfigurert for klubben. Kontroller MyShare-tilgangen eller BCC org-ID under Pott-innstillinger.");
+        var source = eligible.FirstOrDefault() ?? throw new GroupException("Ingen transaksjonskilde er konfigurert for klubben. Kontroller MyShare-tilgangen eller BCC org-ID under Oversikt-innstillinger.");
         var key = $"transactions:{cachePartition}:{scope?.Club.Id}:{scope?.Club.TeamId}:{query.OrgId}:{source.Name}:{from}:{to}";
         if (!cache.TryGetValue(key, out TransactionResult? result) || result is null)
         {

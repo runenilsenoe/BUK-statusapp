@@ -20,6 +20,7 @@ public class PersonFollowUp
     public int ClubId { get; set; }
     public int PersonId { get; set; }
     public string Note { get; set; } = "";
+    public bool ExcludedFromCampaign { get; set; }
     public WorkPreference? Preference { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -27,9 +28,9 @@ public interface IPersonDirectory
 {
     Task<ClubScope> GetAsync(CancellationToken ct = default);
 }
-public record PersonOverview(ClubMember Member, PersonFollowUp FollowUp);
+public record PersonOverview(ClubMember Member, PersonFollowUp FollowUp, bool? MyshareCountedInAksjon = null);
 
-public sealed class PersonService(IDbContextFactory<BukStatusDbContext> factory, IPersonDirectory directory, IWriteAccess access)
+public sealed class PersonService(IDbContextFactory<BukStatusDbContext> factory, IPersonDirectory directory, IWriteAccess access, IMyshareDirectory? myshare = null)
 {
     public async Task<IReadOnlyList<PersonOverview>> GetAllAsync(CancellationToken ct = default)
     {
@@ -37,10 +38,12 @@ public sealed class PersonService(IDbContextFactory<BukStatusDbContext> factory,
         var scope = await directory.GetAsync(ct);
         await using var db = await factory.CreateDbContextAsync(ct);
         var saved = await db.PersonFollowUps.AsNoTracking().Where(p => p.ClubId == scope.Club.Id).ToDictionaryAsync(p => p.PersonId, ct);
+        var campaign = myshare is null ? null : await myshare.GetCampaignAsync(scope, DateOnly.FromDateTime(DateTime.Today), ct);
+        var flags = campaign?.ToDictionary(p => p.PersonId);
         return scope.Club.Members.OrderBy(p => p.DisplayName).Select(p => new PersonOverview(p,
-            saved.GetValueOrDefault(p.Id) ?? new() { ClubId = scope.Club.Id, PersonId = p.Id })).ToArray();
+            saved.GetValueOrDefault(p.Id) ?? new() { ClubId = scope.Club.Id, PersonId = p.Id }, flags?.GetValueOrDefault(p.Id)?.IsCountedInAksjon)).ToArray();
     }
-    public async Task SaveAsync(int personId, string? note, WorkPreference? preference, CancellationToken ct = default)
+    public async Task SaveAsync(int personId, string? note, WorkPreference? preference, CancellationToken ct = default, bool? excludedFromCampaign = null)
     {
         await access.RequireAsync(ct);
         var scope = await directory.GetAsync(ct);
@@ -51,6 +54,7 @@ public sealed class PersonService(IDbContextFactory<BukStatusDbContext> factory,
         await using var db = await factory.CreateDbContextAsync(ct);
         var row = await db.PersonFollowUps.FindAsync([scope.Club.Id, personId], ct);
         if (row is null) { row = new() { ClubId = scope.Club.Id, PersonId = personId }; db.PersonFollowUps.Add(row); }
+        if (excludedFromCampaign.HasValue) row.ExcludedFromCampaign = excludedFromCampaign.Value;
         row.Note = note; row.Preference = preference; row.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
     }

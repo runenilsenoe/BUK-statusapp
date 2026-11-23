@@ -7,8 +7,7 @@
 <h1>Samvirk</h1>
 @if (authorized)
 {
-    <p>Last opp ukens .xlsx eller semikolonseparerte .csv. Hver import er et øyeblikksbilde; saldoer summeres ikke mellom importene. Månedene leses fra kolonnenavnene.</p>
-    <p>Eksportdato hentes automatisk fra filnavn som 2026_11_10_ung.xlsx. For filer uten datoprefiks velger du dato her.</p>
+    <p class="muted">Last opp .xlsx eller .csv. Eksportdato leses fra filnavnet.</p>
     <label>Eksportdato <input type="date" @bind="date" disabled="@busy" /></label>
     <InputFile OnChange="Upload" accept=".xlsx,.csv" disabled="@busy" />
     @if (preview is not null)
@@ -21,14 +20,13 @@
     @if (latest is not null)
     {
         <h2>Status per @latest.SnapshotDate.ToString("dd.MM.yyyy")</h2>
-        <label>Anbefalt minstebeløp ved 50 coins (NOK)
+        <label>Minstebeløp ved 50 coins (NOK)
             <input type="number" min="0.01" max="1000000" step="0.01" @bind="minimumMonthlyAmount" disabled="@busy" />
         </label>
         <button @onclick="SaveMinimum" disabled="@busy">Lagre minstebeløp</button>
         var report = SamvirkStatus.Build(latest, savedMinimumMonthlyAmount);
-        <p>Aktiv/inaktiv følger «Active BUK Drive». Alder og femmånedersperioden gjelder eksportdatoen. Månedsbeløp er «On Track Amount NOK», og «Ligger bak» er «Get On Track Amount NOK».</p>
-        <p class="muted">100 coins vises som ✅beløp+ og bekrefter fullt månedsbeløp, 50 coins bekrefter minst @savedMinimumMonthlyAmount.ToString("#,##0.##") kr. Beløpene vises som minstebeløp (+ eller ≥), utledet fra coins og satsene her. Eksporten har bare én månedssats; historiske satser og nøyaktige innbetalinger er ikke oppgitt. Ved 0 coins kan det fortsatt være betalt under minimum. «–» betyr at data mangler.</p>
-        @if (report.UnknownStatus > 0) { <p>@report.UnknownStatus personer mangler gyldig Active BUK Drive-status. De finnes i eksportdetaljene nedenfor.</p> }
+        <p class="muted">+ og ≥ viser minstebeløp fra coins, basert på gjeldende sats. «–» betyr manglende data.</p>
+        @if (report.UnknownStatus > 0) { <p>@report.UnknownStatus personer mangler aktiv/inaktiv-status.</p> }
         <SamvirkStatusTable Title="Aktive" Rows="report.Active" Months="report.Months" SnapshotDate="report.SnapshotDate" />
         <SamvirkStatusTable Title="Inaktive" Rows="report.Inactive" Months="report.Months" SnapshotDate="report.SnapshotDate" />
         <details><summary>Eksportdetaljer: rabatt, coins og saldo</summary>

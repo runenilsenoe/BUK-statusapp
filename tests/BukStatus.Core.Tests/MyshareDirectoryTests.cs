@@ -53,6 +53,32 @@ public class MyshareDirectoryTests
         var directory = new MyshareDirectory(http,Options.Create(new MyshareOptions { BaseUrl="https://synthetic.example/api",Bearer="must-not-be-used" }),new Tokens());
         Assert.Empty(await directory.GetClubsAsync(21410));
     }
+    [Fact]
+    public async Task Campaign_reads_current_season_with_team_header_and_preserves_false_flags()
+    {
+        var paths = new List<string>();
+        using var http = new HttpClient(new Handler(request =>
+        {
+            paths.Add(request.RequestUri!.PathAndQuery);
+            Assert.Equal("10016", Assert.Single(request.Headers.GetValues("TeamId")));
+            Assert.Equal("synthetic-session-token", request.Headers.Authorization!.Parameter);
+            return request.RequestUri.AbsolutePath.Contains("ClubSeasons")
+                ? """{"statusCode":200,"data":[{"id":9,"startDateLocal":"2025-01-01","endDateLocal":"2025-12-31"},{"id":10,"startDateLocal":"2026-01-01","endDateLocal":"2026-12-31"}]}"""
+                : """{"statusCode":200,"data":[{"personId":1,"name":"Api Name","isCountedInAksjon":false,"targetAmount":12000},{"personId":2,"name":"No Plan","isCountedInAksjon":true,"targetAmount":0}]}""";
+        }));
+        var directory = new MyshareDirectory(http, Options.Create(new MyshareOptions { BaseUrl = "https://synthetic.example/api" }), new Tokens());
+        var rows = await directory.GetCampaignAsync(new(new(4050, 10016, "BUK", []), 4050), new DateOnly(2026, 11, 23));
+        Assert.Equal(["/api/ClubSeasons/", "/api/ClubMembersStatus/?clubSeasonId=10&clubId=4050"], paths);
+        Assert.False(rows![0].IsCountedInAksjon); Assert.Equal("Api Name", rows[0].Name);
+        Assert.Equal(0m, rows[1].TargetAmount);
+    }
+    [Fact]
+    public async Task Ambiguous_season_and_upstream_failure_are_not_treated_as_empty_roster()
+    {
+        using var http = new HttpClient(new Handler(_ => """{"statusCode":200,"data":[]}"""));
+        var directory = new MyshareDirectory(http, Options.Create(new MyshareOptions { BaseUrl = "https://synthetic.example/api", Bearer = "dummy" }));
+        await Assert.ThrowsAsync<MyshareDirectoryException>(() => directory.GetCampaignAsync(new(new(4050, 10016, "BUK", []), 4050), new DateOnly(2026, 11, 23)));
+    }
     private sealed class Tokens : IMyshareTokenProvider
     {
         public bool CanUse => true;
