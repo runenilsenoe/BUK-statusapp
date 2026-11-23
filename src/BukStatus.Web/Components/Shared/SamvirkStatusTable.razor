@@ -1,0 +1,34 @@
+@using BukStatus.Core.Samvirk
+<h3>@Title (@Rows.Length)</h3>
+<div style="overflow-x:auto">
+    <table class="samvirk-status">
+        <caption>@Title · innbetalinger og status per @SnapshotDate.ToString("dd.MM.yyyy")</caption>
+        <thead>
+            <tr><th rowspan="2" scope="col">Navn</th><th rowspan="2" scope="col">Alder</th><th rowspan="2" scope="col">Månedsbeløp NOK</th><th colspan="@Months.Length" scope="colgroup">Innbetaling fra coins · NOK</th><th rowspan="2" scope="col">Ligger bak NOK</th></tr>
+            <tr>@foreach (var month in Months) { <th scope="col">@month.ToString("MMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("nb-NO"))</th> }</tr>
+        </thead>
+        <tbody>
+            @if (Rows.Length == 0) { <tr><td colspan="@(4 + Months.Length)">Ingen personer i denne kategorien.</td></tr> }
+            @foreach (var row in Rows)
+            {
+                <tr @key="row.PersonId"><th scope="row">@row.Name</th><td>@(row.Age?.ToString() ?? "–")</td><td>@Money(row.MonthlyAmount)</td>
+                    @foreach (var payment in row.Payments)
+                    {
+                        <td>
+                            @if (payment.MinimumConfirmedAmount is { } amount) { <span>≥ @Money(amount)</span><br /><small>@payment.Coins coins</small> }
+                            else if (payment.Coins is { } coins) { <span>@coins coins</span><br /><small>Beløp ukjent</small> }
+                            else { <span title="Månedsdata mangler">–</span> }
+                        </td>
+                    }
+                    <td>@Money(row.BehindAmount)</td></tr>
+            }
+        </tbody>
+    </table>
+</div>
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public SamvirkStatusRow[] Rows { get; set; } = [];
+    [Parameter, EditorRequired] public DateOnly[] Months { get; set; } = [];
+    [Parameter] public DateOnly SnapshotDate { get; set; }
+    static string Money(decimal? value) => value?.ToString("N0") ?? "–";
+}

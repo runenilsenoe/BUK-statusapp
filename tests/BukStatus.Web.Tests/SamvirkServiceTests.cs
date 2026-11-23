@@ -44,6 +44,18 @@ public sealed class SamvirkServiceTests : IDisposable
         await Assert.ThrowsAsync<GroupException>(() => service.PreviewAsync(Data(1), "test.csv", new(2026, 1, 1)));
         using var db = factory.CreateDbContext(); Assert.Empty(db.SamvirkImports);
     }
+    [Fact] public async Task Minimum_amount_is_persisted_and_changes_require_authorization()
+    {
+        Assert.Equal(2700m, await service.GetMinimumAsync());
+        await service.SaveMinimumAsync(2800m);
+        var reopened = new SamvirkService(factory, gate, clubs, new ConfigurationBuilder().Build());
+        Assert.Equal(2800m,await reopened.GetMinimumAsync());
+        await Assert.ThrowsAsync<GroupException>(() => reopened.SaveMinimumAsync(0));
+        await Assert.ThrowsAsync<GroupException>(() => reopened.SaveMinimumAsync(1.234m));
+        gate.Denied = true;
+        await Assert.ThrowsAsync<GroupException>(() => reopened.SaveMinimumAsync(2900m));
+        await Assert.ThrowsAsync<GroupException>(() => reopened.GetMinimumAsync());
+    }
     public void Dispose() { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); File.Delete(path); }
     sealed class Factory(DbContextOptions<BukStatusDbContext> options) : IDbContextFactory<BukStatusDbContext>
     { public BukStatusDbContext CreateDbContext() => new(options); }

@@ -90,6 +90,23 @@ public sealed class LoginFlowTests : IDisposable
         return _client.SendAsync(request);
     }
 
+    [Theory]
+    [InlineData(null, "2026_11_10_ung.csv", HttpStatusCode.OK)]
+    [InlineData("2026-11-10", "2026_11_10_ung.csv", HttpStatusCode.OK)]
+    [InlineData("2026-11-11", "2026_11_10_ung.csv", HttpStatusCode.BadRequest)]
+    [InlineData(null, "2026_11_31_ung.csv", HttpStatusCode.BadRequest)]
+    public async Task Samvirk_filename_date_is_used_and_conflicts_are_rejected(string? date, string filename, HttpStatusCode expected)
+    {
+        using var content = new MultipartFormDataContent();
+        if (date is not null) content.Add(new StringContent(date), "date");
+        content.Add(new StringContent("BCC Person ID;Display Name;Church Id\n1;Synthetic;49"), "file", filename);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/samvirk/preview") { Content = content };
+        request.Headers.Add("X-Api-Key", "samvirk-test-key");
+        var response = await _client.SendAsync(request);
+        Assert.Equal(expected, response.StatusCode);
+        if (expected == HttpStatusCode.OK) Assert.Contains("2026-11-10", await response.Content.ReadAsStringAsync());
+    }
+
     [Fact]
     public async Task Samvirk_machine_bridge_requires_preview_and_confirmation_and_blocks_cookie_calls()
     {
@@ -97,14 +114,14 @@ public sealed class LoginFlowTests : IDisposable
         Assert.NotEqual(HttpStatusCode.OK, forbidden.StatusCode);
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent("2026-01-10"), "date");
-        content.Add(new StringContent("BCC Person ID;Display Name;Church Id;Coins 2027-03\n1;Synthetic;49;0"), "file", "sample.csv");
+        content.Add(new StringContent("BCC Person ID;Display Name;Church Id;Active BUK Drive;Birth Date;On Track Amount NOK;Get On Track Amount NOK;Coins 2026-01;Coins 2027-03\n1;Synthetic Active;49;True;11.01.2000;3375;12000;100;0\n2;Synthetic Inactive;49;False;01.01.2000;2700;;50;0"), "file", "sample.csv");
         using var upload = new HttpRequestMessage(HttpMethod.Post, "/api/samvirk/preview") { Content = content };
         upload.Headers.Add("X-Api-Key", "samvirk-test-key");
         var previewResponse = await _client.SendAsync(upload);
         Assert.Equal(HttpStatusCode.OK, previewResponse.StatusCode);
         using var preview = System.Text.Json.JsonDocument.Parse(await previewResponse.Content.ReadAsStringAsync());
         var id = preview.RootElement.GetProperty("id").GetGuid();
-        Assert.Equal("2027-03", preview.RootElement.GetProperty("months")[0].GetString());
+        Assert.Equal("2027-03", preview.RootElement.GetProperty("months")[1].GetString());
         using var confirm = new HttpRequestMessage(HttpMethod.Post, $"/api/samvirk/confirm/{id}");
         confirm.Headers.Add("X-Api-Key", "samvirk-test-key");
         Assert.Equal(HttpStatusCode.OK, (await _client.SendAsync(confirm)).StatusCode);
@@ -113,6 +130,17 @@ public sealed class LoginFlowTests : IDisposable
         var result = await _client.SendAsync(latest);
         Assert.Equal(HttpStatusCode.OK, result.StatusCode);
         Assert.Contains("Synthetic", await result.Content.ReadAsStringAsync());
+        var page = await Send(HttpMethod.Get, "/samvirk", LoginCookie("21410"));
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+        var html = System.Net.WebUtility.HtmlDecode(await page.Content.ReadAsStringAsync());
+        Assert.Contains("Aktive (1)", html);
+        Assert.Contains("Inaktive (1)", html);
+        Assert.Contains(new DateOnly(2025, 9, 1).ToString("MMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("nb-NO")), html);
+        Assert.Contains(new DateOnly(2026, 1, 1).ToString("MMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("nb-NO")), html);
+        Assert.Contains("≥ 3", html);
+        Assert.Contains("100 coins", html);
+        Assert.Contains("50 coins", html);
+        Assert.Contains("Lagre minstebeløp", html);
     }
 
     [Theory]

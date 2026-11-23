@@ -15,6 +15,11 @@ public class SamvirkImport
     public string Hash { get; set; } = "";
     public string DataJson { get; set; } = "";
 }
+public class SamvirkSettings
+{
+    public int Id { get; set; } = 1;
+    public decimal MinimumMonthlyAmount { get; set; } = 2700m;
+}
 public record SamvirkPreview(Guid Id, DateOnly SnapshotDate, int People, string[] Months, int ChurchId, bool AlreadyImported);
 public record SamvirkSnapshot(DateOnly SnapshotDate, DateTimeOffset ImportedAt, SamvirkPerson[] People);
 
@@ -30,9 +35,28 @@ public sealed class SamvirkService(IDbContextFactory<BukStatusDbContext> factory
         if (church <= 0) throw new GroupException("Samvirk-kobling for valgt klubb må konfigureres først.");
         return church;
     }
-    public async Task<SamvirkPreview> PreviewAsync(byte[] bytes, string filename, DateOnly date, CancellationToken ct = default)
+    public async Task<decimal> GetMinimumAsync(CancellationToken ct = default)
+    {
+        await ChurchAsync(ct);
+        await using var db = await factory.OpenForClubAsync(clubs, ct);
+        return (await db.SamvirkSettings.FindAsync([1], ct))?.MinimumMonthlyAmount ?? 2700m;
+    }
+    public async Task SaveMinimumAsync(decimal amount, CancellationToken ct = default)
+    {
+        await ChurchAsync(ct);
+        if (amount <= 0 || amount > 1000000 || decimal.Round(amount, 2) != amount) throw new GroupException("Minstebeløpet må være mellom 0,01 og 1 000 000 kr med høyst to desimaler.");
+        await using var db = await factory.OpenForClubAsync(clubs, ct);
+        var settings = await db.SamvirkSettings.FindAsync([1], ct);
+        if (settings is null) { settings = new(); db.SamvirkSettings.Add(settings); }
+        settings.MinimumMonthlyAmount = amount;
+        await db.SaveChangesAsync(ct);
+    }
+    public async Task<SamvirkPreview> PreviewAsync(byte[] bytes, string filename, DateOnly? suppliedDate, CancellationToken ct = default)
     {
         var church = await ChurchAsync(ct);
+        DateOnly date;
+        try { date = SamvirkExportDate.Resolve(filename, suppliedDate); }
+        catch (InvalidDataException ex) { throw new GroupException(ex.Message); }
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "Europe/Oslo").DateTime);
         if (date.Year < 2020 || date > today) throw new GroupException("Velg en gyldig eksportdato, senest i dag.");
         SamvirkData data;

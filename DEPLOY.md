@@ -160,7 +160,9 @@ Ingen overgang til Core som tilgangsregister gjøres automatisk basert på teste
 ## Samvirk-import
 
 `/samvirk` lar administratorer laste opp én .xlsx eller semikolonseparert UTF-8 .csv
-(maks 5 MB / 10 000 personer). Velg eksportdato og bekreft forhåndsvisningen.
+(maks 5 MB / 10 000 personer). Eksportdato leses fra filnavnets yyyy_MM_dd-prefiks (f.eks. 2026_11_10_ung.xlsx).
+Dato velges manuelt bare hvis prefikset mangler. Bekreft forhåndsvisningen.
+Ugyldig filnavndato eller konflikt med eksplisitt dato avvises.
 Importene lagres som separate øyeblikksbilder i valgt klubbs database; kun bekreftede
 importer vises. Nyeste eksportdato velges uavhengig av opplastingsrekkefølge. Korrigert
 fil på samme dato blir en ny revisjon, mens identisk fil + dato er idempotent.
@@ -181,6 +183,17 @@ forveksles med MyShare klubb 4050/6817. I gammel tilgangsmodus forventes menighe
 mot valgt klubbs autoriserte medlemsliste. Importen gir aldri ny klubbtilgang.
 
 Telegram-broen bruker eksisterende X-Api-Key med administratorrettighet mot:
-POST `/api/samvirk/preview` (multipart `file`, `date`), POST `/confirm/{id}`,
+POST `/api/samvirk/preview` (multipart `file`, valgfri `date` hvis filnavnet har dato), POST `/confirm/{id}`,
 GET `/latest`. Disse rutene godtar kun maskin-API-autentisering. Råfilen beholdes ikke;
 normaliserte eksportfelter lagres i SQLite og inngår i backup.
+
+Samvirk-statusvisningen deler personene etter `Active BUK Drive` (True/False).
+Tabellene viser alder per eksportdato, On Track Amount NOK, Get On Track Amount NOK
+og fem måneder til og med eksportmåneden. 100 coins bekrefter minst fullt månedsbeløp,
+50 coins minst anbefalt sparebeløp. Standard 2700 NOK kan endres på siden og lagres
+per klubb i SamvirkSettings. Beregningen bruker eksportens ene månedssats og den
+lagrede minimumssatsen også for de viste historiske månedene; historiske satser finnes
+ikke i denne eksporten. UI-et merker beløpene som terskler (≥), ikke eksakte overføringer.
+0 coins betyr ikke bekreftet 0 NOK: betalingen kan være under terskelen. Manglende
+månedsdata holdes adskilt fra 0 coins. Personer med ugyldig/manglende Drive-flagg telles
+separat og vises i eksportdetaljene.

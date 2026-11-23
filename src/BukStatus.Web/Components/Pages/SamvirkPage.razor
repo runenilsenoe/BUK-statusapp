@@ -8,6 +8,7 @@
 @if (authorized)
 {
     <p>Last opp ukens .xlsx eller semikolonseparerte .csv. Hver import er et øyeblikksbilde; saldoer summeres ikke mellom importene. Månedene leses fra kolonnenavnene.</p>
+    <p>Eksportdato hentes automatisk fra filnavn som 2026_11_10_ung.xlsx. For filer uten datoprefiks velger du dato her.</p>
     <label>Eksportdato <input type="date" @bind="date" disabled="@busy" /></label>
     <InputFile OnChange="Upload" accept=".xlsx,.csv" disabled="@busy" />
     @if (preview is not null)
@@ -19,7 +20,18 @@
     }
     @if (latest is not null)
     {
-        <h2>Siste import: @latest.SnapshotDate</h2>
+        <h2>Status per @latest.SnapshotDate.ToString("dd.MM.yyyy")</h2>
+        <label>Anbefalt minstebeløp ved 50 coins (NOK)
+            <input type="number" min="0.01" max="1000000" step="0.01" @bind="minimumMonthlyAmount" disabled="@busy" />
+        </label>
+        <button @onclick="SaveMinimum" disabled="@busy">Lagre minstebeløp</button>
+        var report = SamvirkStatus.Build(latest, savedMinimumMonthlyAmount);
+        <p>Aktiv/inaktiv følger «Active BUK Drive». Alder og femmånedersperioden gjelder eksportdatoen. Månedsbeløp er «On Track Amount NOK», og «Ligger bak» er «Get On Track Amount NOK».</p>
+        <p class="muted">100 coins bekrefter fullt månedsbeløp, 50 coins bekrefter minst @savedMinimumMonthlyAmount.ToString("N0") kr. Beløpene vises som minstebeløp (≥), utledet fra coins og satsene her. Eksporten har bare én månedssats; historiske satser og nøyaktige innbetalinger er ikke oppgitt. Ved 0 coins kan det fortsatt være betalt under minimum. «–» betyr at data mangler.</p>
+        @if (report.UnknownStatus > 0) { <p>@report.UnknownStatus personer mangler gyldig Active BUK Drive-status. De finnes i eksportdetaljene nedenfor.</p> }
+        <SamvirkStatusTable Title="Aktive" Rows="report.Active" Months="report.Months" SnapshotDate="report.SnapshotDate" />
+        <SamvirkStatusTable Title="Inaktive" Rows="report.Inactive" Months="report.Months" SnapshotDate="report.SnapshotDate" />
+        <details><summary>Eksportdetaljer: rabatt, coins og saldo</summary>
         <label>Måned <select @bind="month">@foreach (var m in latest.People.SelectMany(p => p.Months).Select(m => m.Month.ToString("yyyy-MM")).Distinct().Order()) { <option>@m</option> }</select></label>
         <div style="overflow:auto"><table><thead><tr><th>Navn</th><th>Person-ID</th><th>UNG-status</th><th>On track</th><th>Saldo NOK</th><th>Rabatt</th><th>Coins</th><th>Gjenstår 50 coins NOK</th><th>Gjenstår 100 coins NOK</th></tr></thead>
         <tbody>@foreach (var person in latest.People.OrderBy(p => p.Name))
@@ -27,11 +39,13 @@
             var period = person.Months.FirstOrDefault(m => m.Month.ToString("yyyy-MM") == month);
             <tr><td>@person.Name</td><td>@person.PersonId</td><td>@person.Fields.GetValueOrDefault("UNG Status")</td><td>@person.Fields.GetValueOrDefault("On Track Status")</td><td>@Amount(person.Amounts.GetValueOrDefault("Current Balance NOK"))</td><td>@(period?.Discount ?? "–")</td><td>@Amount(period?.Coins)</td><td>@Amount(period?.Remaining50)</td><td>@Amount(period?.Remaining100)</td></tr>
         }</tbody></table></div>
+        </details>
     }
 }
 @if (error is not null) { <p class="alert">@error</p> }
 @code {
     bool authorized, busy;
+    decimal minimumMonthlyAmount = 2700m, savedMinimumMonthlyAmount = 2700m;
     string? error;
     DateTime date = DateTime.Today;
     string month = DateTime.Today.ToString("yyyy-MM");
@@ -40,15 +54,28 @@
     static string Amount(decimal? value) => value?.ToString("N0") ?? "–";
     protected override async Task OnInitializedAsync()
     {
-        try { await Access.RequireAsync(); authorized = true; latest = await Service.LatestAsync(); }
+        try { await Access.RequireAsync(); authorized = true; latest = await Service.LatestAsync(); minimumMonthlyAmount = savedMinimumMonthlyAmount = await Service.GetMinimumAsync(); }
         catch (Exception ex) when (ex is GroupException or UnauthorizedAccessException) { error = "Samvirk krever administrator og konfigurert tilgang til menigheten."; }
     }
     async Task Upload(InputFileChangeEventArgs args)
     {
         busy = true; error = null; preview = null;
-        try { using var bytes = new MemoryStream(); await args.File.OpenReadStream(SamvirkParser.MaxBytes).CopyToAsync(bytes); preview = await Service.PreviewAsync(bytes.ToArray(), args.File.Name, DateOnly.FromDateTime(date)); }
-        catch (GroupException ex) { error = ex.Message; }
+        try {
+            DateOnly selected;
+            try { selected = SamvirkExportDate.Resolve(args.File.Name); }
+            catch (InvalidDataException) when (!System.Text.RegularExpressions.Regex.IsMatch(args.File.Name, @"^\d{4}_"))
+            { selected = DateOnly.FromDateTime(date); }
+            date = selected.ToDateTime(TimeOnly.MinValue);
+            using var bytes = new MemoryStream(); await args.File.OpenReadStream(SamvirkParser.MaxBytes).CopyToAsync(bytes); preview = await Service.PreviewAsync(bytes.ToArray(), args.File.Name, DateOnly.FromDateTime(date)); }
+        catch (Exception ex) when (ex is GroupException or InvalidDataException) { error = ex.Message; }
         catch { error = "Filen kunne ikke leses. Kontroller format og størrelse (maks. 5 MB)."; }
+        finally { busy = false; }
+    }
+    async Task SaveMinimum()
+    {
+        busy = true; error = null;
+        try { await Service.SaveMinimumAsync(minimumMonthlyAmount); savedMinimumMonthlyAmount = minimumMonthlyAmount; }
+        catch (GroupException ex) { error = ex.Message; }
         finally { busy = false; }
     }
     async Task Confirm()

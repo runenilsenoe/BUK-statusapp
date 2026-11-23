@@ -14,7 +14,13 @@ public static class SamvirkApi
         {
             if (request.ContentLength is null or > SamvirkParser.MaxBytes + 65536) return Results.BadRequest(new { error = "Filen er for stor." });
             var form = await request.ReadFormAsync(ct);
-            if (form.Files.Count != 1 || !DateOnly.TryParseExact(form["date"], "yyyy-MM-dd", out var date)) return Results.BadRequest(new { error = "Send én fil og eksportdato yyyy-MM-dd." });
+            if (form.Files.Count != 1) return Results.BadRequest(new { error = "Send én fil." });
+            DateOnly? date = null;
+            if (!string.IsNullOrWhiteSpace(form["date"]))
+            {
+                if (!DateOnly.TryParseExact(form["date"], "yyyy-MM-dd", out var supplied)) return Results.BadRequest(new { error = "Eksportdato må være yyyy-MM-dd." });
+                date = supplied;
+            }
             var file = form.Files[0];
             if (file.Length > SamvirkParser.MaxBytes) return Results.BadRequest(new { error = "Maksimalt 5 MB." });
             using var buffer = new MemoryStream(); await file.CopyToAsync(buffer, ct);

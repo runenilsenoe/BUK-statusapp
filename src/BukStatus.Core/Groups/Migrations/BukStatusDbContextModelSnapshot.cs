@@ -169,6 +169,20 @@ namespace BukStatus.Core.Groups.Migrations
                     b.ToTable("SamvirkImports");
                 });
 
+            modelBuilder.Entity("BukStatus.Core.Samvirk.SamvirkSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("MinimumMonthlyAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SamvirkSettings");
+                });
+
             modelBuilder.Entity("BukStatus.Core.Teams.MonthlyTarget", b =>
                 {
                     b.Property<int>("Id")

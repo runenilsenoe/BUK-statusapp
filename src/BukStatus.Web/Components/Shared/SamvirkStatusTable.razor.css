@@ -1,0 +1,5 @@
+.samvirk-status { min-width: 900px; width: 100%; }
+.samvirk-status caption { text-align: left; padding: .5rem 0; }
+.samvirk-status td, .samvirk-status th { padding: .6rem; white-space: nowrap; }
+.samvirk-status td { text-align: right; font-variant-numeric: tabular-nums; }
+.samvirk-status tbody th { text-align: left; font-weight: normal; }
