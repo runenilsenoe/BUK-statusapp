@@ -45,6 +45,19 @@ else
         </p>
     }
 
+    <nav class="report-tabs" aria-label="Rapportvisning">
+        <button type="button" class="@(selectedTeam is null ? "selected" : "")" aria-pressed="@(selectedTeam is null)" @onclick="() => SelectTeam(null)">Tabell</button>
+        @foreach (var team in report.Teams)
+        {
+            <button type="button" class="@(selectedTeam == team.TeamId ? "selected" : "")" aria-pressed="@(selectedTeam == team.TeamId)" @onclick="() => SelectTeam(team.TeamId)">@team.Name</button>
+        }
+    </nav>
+    @if (report.Teams.FirstOrDefault(t => t.TeamId == selectedTeam) is { } selected)
+    {
+        <TeamMonthlyDetails @key="report" Report="report" Team="selected" />
+    }
+    else
+    {
     <div class="table-wrap">
         <table>
             <thead>
@@ -122,12 +135,15 @@ else
             </tbody>
         </table>
     </div>
-    <p class="muted small">Klikk på et lag for å se medlemmene. Innsamlet er alle registrerte bidrag (donasjoner og dugnad) i Contributions-API-et.</p>
+    <p class="muted small">Klikk på et lag for å se medlemmene.</p>
+    }
 }
 
 @code {
     [SupplyParameterFromQuery(Name = "month")] public string? MonthParameter { get; set; }
 
+    [SupplyParameterFromQuery(Name = "team")] public int? TeamParameter { get; set; }
+    private int? selectedTeam;
     private int year;
     private int month;
     private MonthlyTeamReport? report;
@@ -140,7 +156,8 @@ else
         (year, month) = DateOnly.TryParseExact($"{MonthParameter}-01", "yyyy-MM-dd", out var picked)
             ? (picked.Year, picked.Month)
             : (today.Year, today.Month);
-        await Load();
+        selectedTeam = TeamParameter;
+        if (report is null || report.Year != year || report.Month != month) await Load();
     }
 
     private async Task Load()
@@ -160,14 +177,22 @@ else
     private void Move(int months)
     {
         var date = new DateOnly(year, month, 1).AddMonths(months);
-        Navigation.NavigateTo($"report?month={date:yyyy-MM}");
+        Navigate($"{date:yyyy-MM}");
     }
 
     private void PickMonth(ChangeEventArgs e)
     {
         if (e.Value is string value && value.Length == 7)
-            Navigation.NavigateTo($"report?month={value}");
+            Navigate(value);
     }
+
+    private void SelectTeam(int? id)
+    {
+        selectedTeam = id;
+        Navigate($"{year:0000}-{month:00}");
+    }
+
+    private void Navigate(string period) => Navigation.NavigateTo($"report?month={period}" + (selectedTeam is { } id ? $"&team={id}" : ""));
 
     private void Toggle(string team)
     {

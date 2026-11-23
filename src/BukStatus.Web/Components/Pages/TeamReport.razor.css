@@ -1,0 +1,3 @@
+.report-tabs { display: flex; gap: .5rem; overflow-x: auto; padding: .5rem 0 1rem; }
+.report-tabs button { white-space: nowrap; }
+.report-tabs button.selected { background: #164e63; color: white; border-color: #164e63; }

@@ -145,6 +145,42 @@ public sealed class LoginFlowTests : IDisposable
         Assert.Contains("Lagre minstebeløp", html);
     }
 
+    [Fact]
+    public async Task Monthly_report_has_team_tabs_and_scopes_samvirk_rows_to_selected_team()
+    {
+        var factory = _app.Services.GetRequiredService<IDbContextFactory<BukStatusDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        var first = new Team { Name = "Testlag A", Members = [new() { PersonId = 1, DisplayName = "Person A" }] };
+        var second = new Team { Name = "Testlag B", Members = [new() { PersonId = 2, DisplayName = "Person B" }] };
+        db.Teams.AddRange(first, second);
+        BukStatus.Core.Samvirk.SamvirkPerson Person(int id, string name) => new(id, name, 49, new(2000, 1, 1),
+            new() { ["Active BUK Drive"] = "True" },
+            new() { ["On Track Amount NOK"] = 3375, ["Current Target NOK"] = 10000, ["Current Balance NOK"] = 9000 },
+            new(), [new(new(2026, 1, 1), null, 100, null, null)]);
+        db.SamvirkImports.Add(new() { Id = Guid.NewGuid(), SnapshotDate = new(2026, 1, 10), ConfirmedAt = DateTimeOffset.UtcNow,
+            Hash = "synthetic-report", DataJson = System.Text.Json.JsonSerializer.Serialize(new[] { Person(1, "Eksportnavn A"), Person(2, "Eksportnavn B") }) });
+        await db.SaveChangesAsync();
+        var cookie = LoginCookie("21410");
+        var tableResponse = await Send(HttpMethod.Get, "/report?month=2026-01", cookie);
+        var table = WebUtility.HtmlDecode(await tableResponse.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, tableResponse.StatusCode);
+        Assert.Contains("Tabell", table);
+        Assert.Contains("Testlag A", table);
+        Assert.Contains("Testlag B", table);
+        Assert.DoesNotContain("Detaljtransaksjoner", table);
+        var response = await Send(HttpMethod.Get, $"/report?month=2026-01&team={first.Id}", cookie);
+        var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Budsjett og inntjent", html);
+        Assert.Contains("Transaksjoner", html);
+        Assert.Contains("Eksportnavn A", html);
+        Assert.DoesNotContain("Eksportnavn B", html);
+        Assert.Contains("✅3375+", html);
+        Assert.Contains("Akkumulert til eksportdato", html);
+        var missing = await Send(HttpMethod.Get, $"/report?month=2026-02&team={first.Id}", cookie);
+        Assert.Contains("Ingen bekreftet Samvirk-eksport", WebUtility.HtmlDecode(await missing.Content.ReadAsStringAsync()));
+    }
+
     [Theory]
     [InlineData("/")]
     [InlineData("/pot")]

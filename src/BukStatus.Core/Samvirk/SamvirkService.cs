@@ -98,6 +98,25 @@ public sealed class SamvirkService(IDbContextFactory<BukStatusDbContext> factory
         }
         return snapshot with { People = people };
     }
+    public async Task<SamvirkSnapshot?> ForMonthAsync(int year, int month, CancellationToken ct = default)
+    {
+        await ChurchAsync(ct);
+        var from = new DateOnly(year, month, 1);
+        var to = from.AddMonths(1);
+        await using var db = await factory.OpenForClubAsync(clubs, ct);
+        var imports = await db.SamvirkImports.AsNoTracking()
+            .Where(i => i.ConfirmedAt != null && i.SnapshotDate >= from && i.SnapshotDate < to).ToListAsync(ct);
+        var latest = imports.OrderByDescending(i => i.SnapshotDate).ThenByDescending(i => i.ConfirmedAt)
+            .ThenByDescending(i => i.UploadedAt).FirstOrDefault();
+        if (latest is null) return null;
+        var people = JsonSerializer.Deserialize<SamvirkPerson[]>(latest.DataJson)!;
+        if (await clubs.GetSelectedAsync(ct) is { } scope)
+        {
+            var ids = scope.Club.Members.Select(m => m.Id).ToHashSet();
+            people = people.Where(p => ids.Contains(p.PersonId)).ToArray();
+        }
+        return new(latest.SnapshotDate, latest.ConfirmedAt!.Value, people);
+    }
     internal static async Task<SamvirkSnapshot?> ReadLatestAsync(BukStatusDbContext db, CancellationToken ct)
     {
         var date = await db.SamvirkImports.Where(i => i.ConfirmedAt != null).MaxAsync(i => (DateOnly?)i.SnapshotDate, ct);

@@ -56,6 +56,25 @@ public sealed class SamvirkServiceTests : IDisposable
         await Assert.ThrowsAsync<GroupException>(() => reopened.SaveMinimumAsync(2900m));
         await Assert.ThrowsAsync<GroupException>(() => reopened.GetMinimumAsync());
     }
+    [Fact] public async Task Monthly_report_uses_latest_confirmed_export_in_month_without_future_or_draft_data()
+    {
+        var old = await service.PreviewAsync(Data(100), "test.csv", new(2026, 1, 10));
+        await service.ConfirmAsync(old.Id);
+        var latest = await service.PreviewAsync(Data(200), "test.csv", new(2026, 1, 20));
+        await service.ConfirmAsync(latest.Id);
+        var corrected = await service.PreviewAsync(Data(250), "test.csv", new(2026, 1, 20));
+        await service.ConfirmAsync(corrected.Id);
+        await service.PreviewAsync(Data(999), "test.csv", new(2026, 1, 25));
+        var future = await service.PreviewAsync(Data(300), "test.csv", new(2026, 2, 1));
+        await service.ConfirmAsync(future.Id);
+        var january = await service.ForMonthAsync(2026, 1);
+        Assert.Equal(new DateOnly(2026, 1, 20), january!.SnapshotDate);
+        Assert.Equal(250m, january.People[0].Amounts["Current Balance NOK"]);
+        Assert.Null(await service.ForMonthAsync(2025, 12));
+        Assert.Null(await service.ForMonthAsync(2026, 3));
+        gate.Denied = true;
+        await Assert.ThrowsAsync<GroupException>(() => service.ForMonthAsync(2026, 1));
+    }
     public void Dispose() { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); File.Delete(path); }
     sealed class Factory(DbContextOptions<BukStatusDbContext> options) : IDbContextFactory<BukStatusDbContext>
     { public BukStatusDbContext CreateDbContext() => new(options); }

@@ -1,0 +1,149 @@
+@using BukStatus.Core.Samvirk
+@using BukStatus.Core.Transactions
+@inject TransactionService Transactions
+@inject SamvirkService Samvirk
+
+<h2>@Team.Name</h2>
+<h3>BUK</h3>
+@if (bukError is not null) { <p class="alert">@bukError</p> }
+else if (members is null) { <p class="muted">Henter transaksjoner …</p> }
+else
+{
+    <div class="report-columns">
+        <div class="table-wrap">
+            <table>
+                <caption>Transaksjoner · @Format.MonthName(Report.Month)</caption>
+                <thead><tr><th>Navn / beskrivelse</th><th>Dato</th><th class="num">Timer</th><th class="num">Beløp</th></tr></thead>
+                <tbody>
+                    @foreach (var member in members)
+                    {
+                        <tr class="person-total"><th colspan="3">@member.Name</th><td class="num">@Format.Kr(member.MonthCollected)</td></tr>
+                        @foreach (var entry in member.Transactions)
+                        {
+                            <tr><td>@entry.Description</td><td>@entry.Date.ToString("dd.MM")</td><td class="num">@entry.Hours?.ToString("0.##")</td><td class="num">@Format.Kr(entry.Amount)</td></tr>
+                        }
+                        @if (member.Transactions.Count == 0) { <tr><td colspan="4" class="muted">Ingen transaksjoner denne måneden.</td></tr> }
+                    }
+                    <tr class="total"><th colspan="3">Totalt</th><td class="num">@Format.Kr(members.Sum(m => m.MonthCollected))</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <caption>Budsjett og inntjent · BUK</caption>
+                <thead>
+                    <tr><th rowspan="2">Navn</th><th colspan="3">@Format.MonthName(Report.Month)</th><th colspan="3">Akkumulert @Report.Year</th></tr>
+                    <tr><th class="num">Budsjett</th><th class="num">Inntjent</th><th class="num">Avvik</th><th class="num">Budsjett</th><th class="num">Inntjent</th><th class="num">Avvik</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in members)
+                    {
+                        <tr><th>@m.Name</th><td class="num">@Format.Kr(m.MonthTarget)</td><td class="num">@Format.Kr(m.MonthCollected)</td><td class="num">@Format.Kr(m.MonthCollected - m.MonthTarget)</td><td class="num">@Format.Kr(m.AccumulatedTarget)</td><td class="num">@Format.Kr(m.AccumulatedCollected)</td><td class="num">@Format.Kr(m.AccumulatedCollected - m.AccumulatedTarget)</td></tr>
+                    }
+                    <tr class="total"><th>Totalt</th><td class="num">@Format.Kr(members.Sum(m => m.MonthTarget))</td><td class="num">@Format.Kr(members.Sum(m => m.MonthCollected))</td><td class="num">@Format.Kr(members.Sum(m => m.MonthCollected - m.MonthTarget))</td><td class="num">@Format.Kr(members.Sum(m => m.AccumulatedTarget))</td><td class="num">@Format.Kr(members.Sum(m => m.AccumulatedCollected))</td><td class="num">@Format.Kr(members.Sum(m => m.AccumulatedCollected - m.AccumulatedTarget))</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<h3>Samvirk</h3>
+@if (samvirkError is not null) { <p class="alert">@samvirkError</p> }
+else if (!loaded) { <p class="muted">Henter Samvirk …</p> }
+else if (snapshot is null) { <p class="muted">Ingen bekreftet Samvirk-eksport for @Format.MonthName(Report.Month) @Report.Year.</p> }
+else
+{
+    <p class="muted small">Eksport @snapshot.SnapshotDate.ToString("dd.MM.yyyy"). Akkumulert viser saldo mot gjeldende mål i eksporten. Detaljtransaksjoner er ikke tilgjengelige.</p>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th rowspan="2">Navn</th><th rowspan="2" class="num">Alder</th><th colspan="5">@Format.MonthName(Report.Month)</th><th colspan="3">Akkumulert til eksportdato</th></tr>
+                <tr><th class="num">Månedsmål</th><th class="num">Innbetalt mot mål</th><th class="num">Avvik</th><th class="num">Coins</th><th class="num">Get on track</th><th class="num">Mål</th><th class="num">Saldo</th><th class="num">Avvik</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var member in Team.Members)
+                {
+                    var person = snapshot.People.FirstOrDefault(p => p.PersonId == member.PersonId);
+                    var status = samvirkRows.GetValueOrDefault(member.PersonId);
+                    var payment = status?.Payments.LastOrDefault();
+                    var target = person?.Amounts.GetValueOrDefault("Current Target NOK");
+                    var balance = person?.Amounts.GetValueOrDefault("Current Balance NOK");
+                    <tr>
+                        <th>@(person?.Name ?? member.DisplayName ?? $"Person {member.PersonId}")</th><td class="num">@status?.Age</td>
+                        <td class="num">@Money(status?.MonthlyAmount)</td><td class="num">@if (payment is not null) { <SamvirkPaymentValue Payment="payment" /> } else { <span>–</span> }</td>
+                        <td class="num">@Difference(payment, status?.MonthlyAmount)</td>
+                    <td class="num">@(payment?.Coins?.ToString("0.##") ?? "–")</td><td class="num">@Money(status?.BehindAmount)</td>
+                        <td class="num">@Money(target)</td><td class="num">@Money(balance)</td><td class="num">@Money(balance - target)</td>
+                    </tr>
+                }
+                <tr class="total">
+                    <th>Totalt</th><td></td><td class="num">@Money(SumStatus(s => s.MonthlyAmount))</td>
+                    <td class="num">@(HasThreshold ? "≥ " : "")@Money(SumStatus(s => Paid(s.Payments.LastOrDefault())))</td>
+                    <td class="num">@(HasThreshold ? "≥ " : "")@Money(SumStatus(s => Paid(s.Payments.LastOrDefault()) - s.MonthlyAmount))</td>
+                    <td class="num">@(SumStatus(s => s.Payments.LastOrDefault()?.Coins)?.ToString("0.##") ?? "–")</td><td class="num">@Money(SumStatus(s => s.BehindAmount))</td>
+                    <td class="num">@Money(SumAmount("Current Target NOK"))</td><td class="num">@Money(SumAmount("Current Balance NOK"))</td>
+                    <td class="num">@Money(SumAmount("Current Balance NOK") - SumAmount("Current Target NOK"))</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public MonthlyTeamReport Report { get; set; } = default!;
+    [Parameter, EditorRequired] public TeamMonthRow Team { get; set; } = default!;
+    private IReadOnlyList<MemberMonthDetails>? members;
+    private TransactionResult? ledger;
+    private SamvirkSnapshot? snapshot;
+    private Dictionary<int, SamvirkStatusRow> samvirkRows = [];
+    private string? bukError, samvirkError;
+    private bool loaded;
+    private (int Year, int Month)? loadedPeriod;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedPeriod != (Report.Year, Report.Month))
+        {
+            loaded = false;
+            members = null;
+            ledger = null;
+            snapshot = null;
+            samvirkRows = [];
+            bukError = samvirkError = null;
+            var from = new DateOnly(Report.Year, 1, 1);
+            var end = new DateOnly(Report.Year, Report.Month, 1).AddMonths(1).AddDays(-1);
+            try { ledger = await Transactions.GetAsync(from, end); }
+            catch (Exception ex) { bukError = $"Kunne ikke hente BUK-transaksjoner: {ex.Message}"; }
+            try
+            {
+                snapshot = await Samvirk.ForMonthAsync(Report.Year, Report.Month);
+                if (snapshot is not null)
+                {
+                    var status = SamvirkStatus.Build(snapshot, await Samvirk.GetMinimumAsync());
+                    samvirkRows = status.Active.Concat(status.Inactive).ToDictionary(p => p.PersonId);
+                }
+            }
+            catch (Exception ex) { samvirkError = $"Kunne ikke hente Samvirk: {ex.Message}"; }
+            loadedPeriod = (Report.Year, Report.Month);
+            loaded = true;
+        }
+        members = ledger is null ? null : TeamMonthDetails.Build(Team, Report, ledger.Rows);
+    }
+
+    private IEnumerable<SamvirkStatusRow?> TeamStatuses => Team.Members.Select(m => samvirkRows.GetValueOrDefault(m.PersonId));
+    private bool HasThreshold => SumStatus(s => Paid(s.Payments.LastOrDefault())) is not null && TeamStatuses.Any(s => s?.Payments.LastOrDefault() is { CalculatedAmount: null, MinimumConfirmedAmount: not null });
+    private decimal? SumStatus(Func<SamvirkStatusRow, decimal?> value) => SumComplete(TeamStatuses.Select(s => s is null ? null : value(s)));
+    private decimal? SumAmount(string key) => SumComplete(Team.Members.Select(m => snapshot?.People.FirstOrDefault(p => p.PersonId == m.PersonId)?.Amounts.GetValueOrDefault(key)));
+    private static decimal? SumComplete(IEnumerable<decimal?> source)
+    {
+        var values = source.ToArray();
+        return values.Length == 0 || values.Any(v => v is null) ? null : values.Sum(v => v!.Value);
+    }
+    private static decimal? Paid(SamvirkMonthlyPayment? payment) => payment?.CalculatedAmount ?? payment?.MinimumConfirmedAmount;
+    private static string Difference(SamvirkMonthlyPayment? payment, decimal? target)
+    {
+        var value = Paid(payment) - target;
+        return value is null ? "–" : (payment?.CalculatedAmount is null ? "≥ " : "") + Money(value);
+    }
+    private static string Money(decimal? amount) => amount is { } value ? Format.Kr(value) : "–";
+}
