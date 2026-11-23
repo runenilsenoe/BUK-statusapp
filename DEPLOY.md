@@ -237,3 +237,9 @@ valg av lag/gruppe avgrenser fortsatt simuleringen. Uten personidentitet (lokale
 testdata eller gammel anonym storskjerm) brukes alle lokalt registrerte personer
 fra både lag og grupper, uten duplikater. Feil ved innhenting av den innloggede
 MyShare-listen skal vises som feil fremfor en ufullstendig lagbasert totalsum.
+
+Medlemsvelgeren beholder manuell innlegging av person-ID/navn i legacy-modus
+hvis MyShare ikke svarer eller ikke er konfigurert. Navnesøket viser da kun
+lokalt lagrede personer og merkes tydelig som ufullstendig. Klubbmodus bruker
+aldri denne reserveløsningen, siden MyShare avgjør klubbtilgangen. HTTP 401 og
+403 vises med hver sin forklaring; ingen tokens eller svarinnhold vises.

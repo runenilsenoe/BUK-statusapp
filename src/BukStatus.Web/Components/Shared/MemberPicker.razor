@@ -1,12 +1,16 @@
 @using BukStatus.Core.Clubs
 @inject BukStatus.Core.People.IPersonDirectory Directory
+@inject IClubContext Clubs
+@inject TeamService Teams
+@inject GroupService Groups
 
 @if (error is not null)
 {
     <p class="alert">@error</p>
 }
-else
+@if (error is null || localFallback)
 {
+    @if (localFallback) { <p class="muted">Søket viser bare navn som allerede er lagret lokalt, ikke hele MyShare-listen. Nye personer kan legges inn med person-ID og navn nedenfor.</p> }
     <label>Søk etter person <input type="search" @bind="search" @bind:event="oninput" @bind:after="SearchChanged" placeholder="Skriv et navn eller person-ID" aria-label="Søk etter person" /></label>
     <label>Person fra @clubName
         <select value="@Value" @onchange="Changed" aria-label="Velg medlem fra MyShare">
@@ -18,6 +22,11 @@ else
         </select>
     </label>
     @if (!members.Any(Matches)) { <p role="status" class="muted">Ingen tilgjengelige personer matcher søket.</p> }
+    @if (localFallback)
+    {
+        <label>Person-ID <input type="number" min="1" value="@Value" @onchange="ManualIdChanged" aria-label="Person-ID" /></label>
+        <label>Navn <input @bind="manualName" @bind:after="ManualNameChanged" maxlength="200" aria-label="Navn" /></label>
+    }
 }
 @code {
     [Parameter] public int? Value { get; set; }
@@ -28,10 +37,18 @@ else
     private string clubName = "MyShare";
     private string search = "";
     private string? error;
+    private bool localFallback;
+    private int? previousValue;
+    private string manualName = "";
     private readonly DateOnly today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "Europe/Oslo").DateTime);
     private bool Matches(ClubMember m) => !ExcludedIds.Contains(m.Id) && (string.IsNullOrWhiteSpace(search)
         || search.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .All(word => m.DisplayName.Contains(word, StringComparison.OrdinalIgnoreCase) || m.Id.ToString().Contains(word)));
+    protected override void OnParametersSet()
+    {
+        if (previousValue.HasValue && Value is null) manualName = "";
+        previousValue = Value;
+    }
     protected override async Task OnInitializedAsync()
     {
         try
@@ -40,15 +57,34 @@ else
             members = scope.Club.Members;
             clubName = scope.Club.Name;
         }
-        catch { error = "Kunne ikke hente medlemmer fra MyShare. Prøv å laste siden på nytt."; }
+        catch (Exception ex)
+        {
+            error = ex is MyshareDirectoryException ? ex.Message : "Kunne ikke hente medlemmer fra MyShare. Prøv igjen senere.";
+            // Restore the legacy form's existing ability to enter an ID; club mode always fails closed.
+            if (!Clubs.Enabled)
+            {
+                localFallback = true; clubName = "lokalt register";
+                var local = (await Teams.GetAllAsync()).SelectMany(t => t.Members).Select(m => (m.PersonId, m.DisplayName))
+                    .Concat((await Groups.GetAllAsync()).SelectMany(g => g.Members).Select(m => (m.PersonId, m.DisplayName)));
+                members = local.DistinctBy(m => m.PersonId).Select(m => new ClubMember(m.PersonId, m.DisplayName ?? $"Person {m.PersonId}", null, null, null, null)).ToArray();
+            }
+        }
     }
     private async Task SearchChanged()
     {
-        if (Value is not null) { await ValueChanged.InvokeAsync(null); await MemberChanged.InvokeAsync(null); }
+        if (Value is not null) { manualName = ""; await ValueChanged.InvokeAsync(null); await MemberChanged.InvokeAsync(null); }
     }
+    private async Task ManualIdChanged(ChangeEventArgs e)
+    {
+        int? id = int.TryParse(e.Value?.ToString(), out var parsed) && parsed > 0 ? parsed : null;
+        await ValueChanged.InvokeAsync(id);
+        await MemberChanged.InvokeAsync(id is { } personId ? new(personId, manualName, null, null, null, null) : null);
+    }
+    private Task ManualNameChanged() => MemberChanged.InvokeAsync(Value is { } id ? new(id, manualName, null, null, null, null) : null);
     private async Task Changed(ChangeEventArgs e)
     {
         var member = int.TryParse(e.Value?.ToString(), out var id) ? members.FirstOrDefault(m => m.Id == id && Matches(m)) : null;
+        manualName = member?.DisplayName ?? "";
         await ValueChanged.InvokeAsync(member?.Id);
         await MemberChanged.InvokeAsync(member);
     }

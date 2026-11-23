@@ -128,12 +128,35 @@ public sealed class ClubAccessTests : IDisposable
         Assert.DoesNotContain("<option value=\"101\">", html);
     }
 
+    [Fact]
+    public async Task Legacy_member_form_keeps_local_search_and_manual_entry_when_myshare_rejects_login()
+    {
+        directory.Fail = true;
+        using var app = App().WithWebHostBuilder(host => host.UseSetting("ClubAccess:Enabled", "false"));
+        using var client = Client(app,4050);
+        await using var db = await app.Services.GetRequiredService<Microsoft.EntityFrameworkCore.IDbContextFactory<BukStatus.Core.Groups.BukStatusDbContext>>().CreateDbContextAsync();
+        var team = new BukStatus.Core.Teams.Team { Name = "Target" };
+        var other = new BukStatus.Core.Teams.Team { Name = "Source", Members = [new() { PersonId = 999, DisplayName = "Locally known person" }] };
+        db.Teams.AddRange(team,other); await db.SaveChangesAsync();
+        var response = await client.GetAsync($"/teams/{team.Id}");
+        Assert.Equal(HttpStatusCode.OK,response.StatusCode);
+        var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+        Assert.Contains("HTTP 401",html);
+        Assert.Contains("ikke hele MyShare-listen",html);
+        Assert.Contains("Locally known person",html);
+        Assert.Contains("aria-label=\"Person-ID\"",html);
+        Assert.Contains("aria-label=\"Navn\"",html);
+        Assert.Contains("type=\"search\"",html);
+    }
+
     private sealed class DirectoryStub : IMyshareDirectory
     {
         public List<int> Requests { get; } = [];
+        public bool Fail;
         public Task<IReadOnlyList<MyshareClub>> GetClubsAsync(int personId, CancellationToken ct = default)
         {
             Requests.Add(personId);
+            if (Fail) throw new MyshareDirectoryException("MyShare avviser innloggingen (HTTP 401). Kontroller MyShare-tokenet.");
             return Task.FromResult<IReadOnlyList<MyshareClub>>([
                 new(4050, 10016, "BUK test", [new(101, "BUK member", "BUK", "member", new DateOnly(2000, 5, 12), 1)]),
                 new(6817, 10016, "BCC test", [new(202, "BCC member", null, null, null, 40)])]);

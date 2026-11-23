@@ -61,11 +61,7 @@ else
     }
 
     <form class="inline-form add-member" @onsubmit="AddMember">
-        <MemberPicker @bind-Value="newPersonId" />
-        @if (!Clubs.Enabled)
-        {
-            <input @bind="newDisplayName" placeholder="Navn (valgfritt)" aria-label="Navn" maxlength="200" />
-        }
+        <MemberPicker @bind-Value="newPersonId" MemberChanged="SelectedMember" />
         <button type="submit" class="primary" disabled="@busy">Legg til</button>
     </form>
 
@@ -167,6 +163,8 @@ else
         await Groups.DeleteAsync(GroupId);
         Navigation.NavigateTo("/");
     }
+
+    private void SelectedMember(BukStatus.Core.Clubs.ClubMember? member) => newDisplayName = member?.DisplayName;
 
     private async Task AddMember() => await Run(async () =>
     {

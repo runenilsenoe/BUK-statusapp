@@ -40,7 +40,7 @@ public class MyshareDirectoryTests
     {
         using var http = new HttpClient(new Handler(_ => "", HttpStatusCode.Unauthorized));
         var directory = new MyshareDirectory(http, Options.Create(new MyshareOptions { BaseUrl = "https://example.test/api/", Bearer = "dummy" }));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => directory.GetClubsAsync(21410));
+        await Assert.ThrowsAsync<MyshareDirectoryException>(() => directory.GetClubsAsync(21410));
     }
     private sealed class Handler(Func<HttpRequestMessage, string> body, HttpStatusCode code = HttpStatusCode.OK) : HttpMessageHandler
     {

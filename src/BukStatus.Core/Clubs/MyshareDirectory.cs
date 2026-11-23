@@ -16,6 +16,8 @@ public sealed record ClubMember(int Id, string DisplayName, string? FirstName, s
     }
 }
 public sealed record MyshareClub(int Id, int TeamId, string Name, IReadOnlyList<ClubMember> Members);
+public sealed class MyshareDirectoryException(string message) : InvalidOperationException(message);
+
 public interface IMyshareDirectory
 {
     Task<IReadOnlyList<MyshareClub>> GetClubsAsync(int personId, CancellationToken ct = default);
@@ -31,14 +33,19 @@ public sealed class MyshareDirectory(HttpClient client, IOptions<MyshareOptions>
         if (!Uri.TryCreate(settings.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute, out var root)
             || root.Scheme != "https" || root.UserInfo.Length > 0 || root.Query.Length > 0 || root.Fragment.Length > 0
             || string.IsNullOrWhiteSpace(settings.Bearer))
-            throw new InvalidOperationException("MyShare-tilgang er ikke konfigurert.");
+            throw new MyshareDirectoryException("MyShare-tilgang er ikke konfigurert. En administrator må sette opp tilgangen.");
         async Task<JsonElement[]> Get(string path, int? teamId = null)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(root, path));
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.Bearer);
             if (teamId.HasValue) request.Headers.Add("TeamId", teamId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
             using var response = await client.SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"MyShare avviste forespørselen (HTTP {(int)response.StatusCode}).");
+            if (!response.IsSuccessStatusCode) throw new MyshareDirectoryException(response.StatusCode switch
+            {
+                System.Net.HttpStatusCode.Unauthorized => "MyShare avviser innloggingen (HTTP 401). En administrator må kontrollere eller fornye MyShare-tokenet.",
+                System.Net.HttpStatusCode.Forbidden => "MyShare nekter tilgang (HTTP 403). En administrator må kontrollere API-rettighetene.",
+                _ => $"MyShare svarte med HTTP {(int)response.StatusCode}. Prøv igjen senere."
+            });
             using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
             var value = body.RootElement;
             if (value.GetProperty("statusCode").GetInt32() != 200 || value.GetProperty("data").ValueKind != JsonValueKind.Array)
