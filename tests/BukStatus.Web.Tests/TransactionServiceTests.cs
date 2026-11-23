@@ -46,14 +46,70 @@ public sealed class TransactionServiceTests : IDisposable
         await Assert.ThrowsAsync<GroupException>(()=>service.GetAsync(new(2026,2,1),new(2026,1,1)));
         await Assert.ThrowsAsync<GroupException>(()=>service.GetAsync(new(2000,1,1),new(2026,1,1)));
     }
+    [Fact] public async Task Contributions_is_preferred_and_reads_only_the_selected_clubs_mapped_organisations()
+    {
+        var contributions = new ContributionsSource();
+        var mapping = new Mapping();
+        var myshare = new MyshareExtraContributionsSource(new HttpFactory(handler), Options.Create(new MyshareOptions { BaseUrl = "https://synthetic.example/api", Bearer = "synthetic", ClubId = 4050 }));
+        var ledger = new TransactionService([myshare, contributions], clubs, factory, cache, new Gate(), mapping);
+        var result = await ledger.GetAsync(new(2026,1,1), new(2026,1,31));
+        Assert.Equal("Contributions", result.Source);
+        Assert.Equal([49, 50], contributions.OrgIds);
+        Assert.Equal([4050], mapping.ClubIds);
+        Assert.Equal(0, handler.Calls);
+        Assert.Contains(result.Rows, r => r.Amount == -20);
+        Assert.Contains(result.Rows, r => r.PersonId == 0);
+        clubs.Id = 6817;
+        await ledger.GetAsync(new(2026,1,1), new(2026,1,31));
+        Assert.Equal([49, 50, 51], contributions.OrgIds);
+        clubs.Denied = true;
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => ledger.GetAsync(new(2026,1,1), new(2026,1,31)));
+        Assert.Equal([4050, 6817], mapping.ClubIds);
+    }
+    [Fact] public async Task Legacy_contributions_does_not_require_a_myshare_session_or_an_org_setting()
+    {
+        clubs.Enabled = false;
+        var source = new ContributionsSource();
+        var mapping = new Mapping();
+        var ledger = new TransactionService([source], clubs, factory, cache, new Gate(), mapping);
+        var result = await ledger.GetAsync(new(2026,1,1), new(2026,1,31));
+        Assert.Equal("Contributions", result.Source);
+        Assert.Equal([4050], mapping.ClubIds);
+        Assert.Equal([49, 50], source.OrgIds);
+    }
+    [Fact] public async Task Unmapped_selected_club_does_not_use_an_arbitrary_saved_org()
+    {
+        using (var db = factory.CreateDbContext()) { (await db.PotSettings.SingleAsync()).ExtraOrgId = 999; await db.SaveChangesAsync(); }
+        var ledger = new TransactionService([new ContributionsSource()], clubs, factory, cache, new Gate(), new Mapping { Empty = true });
+        await Assert.ThrowsAsync<GroupException>(() => ledger.GetAsync(new(2026,1,1), new(2026,1,31)));
+    }
+    sealed class Mapping : IClubOrganisationResolver
+    {
+        public bool Empty;
+        public List<int> ClubIds = [];
+        public Task<IReadOnlyList<int>> GetOrgIdsAsync(int clubId, CancellationToken ct = default)
+        { ClubIds.Add(clubId); return Task.FromResult<IReadOnlyList<int>>(Empty ? [] : clubId == 4050 ? [49,50] : [51]); }
+    }
+    sealed class ContributionsSource : IExtraContributionsSource
+    {
+        public string Name => "Contributions";
+        public List<int> OrgIds = [];
+        public bool CanHandle(ExtraContributionsQuery query) => query.OrgId > 0;
+        public Task<IReadOnlyList<ExtraContribution>> GetAsync(ExtraContributionsQuery query, CancellationToken ct)
+        {
+            OrgIds.Add(query.OrgId!.Value);
+            Assert.Null(query.DescriptionFilter); Assert.Empty(query.ExcludedPersonIds);
+            return Task.FromResult<IReadOnlyList<ExtraContribution>>([new(1, new(2026,1,1), -20, "Refund"),new(0, new(2026,1,2), 50,"Unassigned")]);
+        }
+    }
     public void Dispose() { cache.Dispose(); Directory.Delete(folder,true); }
     sealed class Gate : BukStatus.Core.Administration.IWriteAccess { public Task RequireAsync(CancellationToken ct = default) => Task.CompletedTask; }
     sealed class Factory(DbContextOptions<BukStatusDbContext> options) : IDbContextFactory<BukStatusDbContext> { public BukStatusDbContext CreateDbContext()=>new(options); }
     sealed class Clubs : IClubContext
     {
-        public bool Enabled => true; public int Id = 4050; public bool Denied;
+        public bool Enabled { get; set; } = true; public int Id = 4050; public bool Denied;
         public Task<IReadOnlyList<MyshareClub>> GetClubsAsync(CancellationToken ct = default)=>throw new NotImplementedException();
-        public Task<ClubScope?> GetSelectedAsync(CancellationToken ct = default) => Denied ? throw new UnauthorizedAccessException() : Task.FromResult<ClubScope?>(new(new(Id,10016,"Synthetic",[new(1,"Roster member",null,null,null,20)]),4050));
+        public Task<ClubScope?> GetSelectedAsync(CancellationToken ct = default) => !Enabled ? Task.FromResult<ClubScope?>(null) : Denied ? throw new UnauthorizedAccessException() : Task.FromResult<ClubScope?>(new(new(Id,10016,"Synthetic",[new(1,"Roster member",null,null,null,20)]),4050));
     }
     sealed class HttpFactory(Handler handler) : IHttpClientFactory { public HttpClient CreateClient(string name)=>new(handler,false); }
     sealed class Handler : HttpMessageHandler

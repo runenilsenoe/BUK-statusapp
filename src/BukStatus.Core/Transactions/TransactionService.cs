@@ -4,12 +4,13 @@ using BukStatus.Core.Groups;
 using BukStatus.Core.Pot;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 
 namespace BukStatus.Core.Transactions;
 
 public record TransactionResult(IReadOnlyList<ExtraContribution> Rows, string Source, DateTimeOffset FetchedAt);
 public sealed class TransactionService(IEnumerable<IExtraContributionsSource> sources, IClubContext clubs,
-    IDbContextFactory<BukStatusDbContext> factory, IMemoryCache cache, BukStatus.Core.Administration.IWriteAccess access)
+    IDbContextFactory<BukStatusDbContext> factory, IMemoryCache cache, BukStatus.Core.Administration.IWriteAccess access, IClubOrganisationResolver? organisations = null, IConfiguration? config = null)
 {
     private readonly Guid cachePartition = Guid.NewGuid();
     public async Task<TransactionResult> GetAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
@@ -22,15 +23,27 @@ public sealed class TransactionService(IEnumerable<IExtraContributionsSource> so
         if (clubs.Enabled && scope is null) throw new UnauthorizedAccessException();
         await using var db = await factory.OpenForClubAsync(clubs, ct);
         var settings = await db.PotSettings.AsNoTracking().FirstOrDefaultAsync(ct) ?? new PotSettings();
-        var query = new ExtraContributionsQuery(settings.ExtraOrgId, null, from, to, new HashSet<int>(), scope?.Club.Id, scope?.Club.TeamId, IncludeUnassigned: true);
-        var eligible = sources.Where(s => s.CanHandle(query) && (scope is null || s is MyshareExtraContributionsSource))
-            .OrderBy(s => s is MyshareExtraContributionsSource ? 0 : 1).ToArray();
-        var source = eligible.FirstOrDefault() ?? throw new GroupException("Ingen transaksjonskilde er konfigurert for klubben. Kontroller MyShare-tilgangen eller BCC org-ID under Oversikt-innstillinger.");
-        var key = $"transactions:{cachePartition}:{scope?.Club.Id}:{scope?.Club.TeamId}:{query.OrgId}:{source.Name}:{from}:{to}";
+        // Club mode requires a verified club mapping. Legacy mode is restricted to the configured club
+        // after the administrator check above; it does not need a browser's MyShare token.
+        var myshareClubId = config?.GetValue<int?>("Myshare:ClubId");
+        var legacyClubId = config?.GetValue<int?>("ClubAccess:LegacyClubId");
+        var clubId = scope?.Club.Id ?? (myshareClubId is > 0 ? myshareClubId.Value : legacyClubId is > 0 ? legacyClubId.Value : 4050);
+        IReadOnlyList<int> orgIds = organisations is null ? [] : await organisations.GetOrgIdsAsync(clubId, ct);
+        if (orgIds.Count == 0 && scope is null && settings.ExtraOrgId is > 0) orgIds = [settings.ExtraOrgId.Value];
+        var query = new ExtraContributionsQuery(orgIds.Count > 0 ? orgIds[0] : settings.ExtraOrgId,
+            null, from, to, new HashSet<int>(), scope?.Club.Id ?? (organisations is null ? null : clubId), scope?.Club.TeamId, IncludeUnassigned: true);
+        var eligible = sources.Where(s => s.CanHandle(query) && (scope is null || s is MyshareExtraContributionsSource || orgIds.Count > 0))
+            .OrderBy(s => s is MyshareExtraContributionsSource ? 1 : 0).ToArray();
+        var source = eligible.FirstOrDefault() ?? throw new GroupException("Ingen transaksjonskilde er tilgjengelig. Kontroller klubbkoblingen og lesetilgangen til Contributions.");
+        var key = $"transactions:{cachePartition}:{clubId}:{scope?.Club.TeamId}:{string.Join(',', orgIds)}:{query.OrgId}:{source.Name}:{from}:{to}";
         if (!cache.TryGetValue(key, out TransactionResult? result) || result is null)
         {
-            IReadOnlyList<ExtraContribution> rows;
-            try { rows = await source.GetAsync(query, ct); }
+            var rows = new List<ExtraContribution>();
+            try
+            {
+                if (source is MyshareExtraContributionsSource || orgIds.Count == 0) rows.AddRange(await source.GetAsync(query, ct));
+                else foreach (var orgId in orgIds) rows.AddRange(await source.GetAsync(query with { OrgId = orgId }, ct));
+            }
             catch (MyshareDirectoryException) { throw; }
             catch (Exception ex) when (ex is not OperationCanceledException) { throw new GroupException("Kunne ikke hente transaksjoner. Kontroller API-tilgang og prøv igjen."); }
             result = new(rows.Where(r => r.Date >= from && r.Date <= to).OrderByDescending(r => r.Date).ThenByDescending(r => r.Id).ToArray(), source.Name, DateTimeOffset.UtcNow);

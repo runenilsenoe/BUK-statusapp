@@ -38,6 +38,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IMemberStatusService, BccMemberStatusService>();
             services.AddSingleton<IContributionHistoryService, BccContributionHistoryService>();
             services.AddSingleton<IExtraContributionsSource, BccExtraContributionsSource>();
+            services.AddScoped<BukStatus.Core.Transactions.IClubOrganisationResolver, BukStatus.Core.Transactions.ClubOrganisationResolver>();
         }
 
         // myshare is the backup for extra contributions (tried after the BCC API), and only used when configured.
