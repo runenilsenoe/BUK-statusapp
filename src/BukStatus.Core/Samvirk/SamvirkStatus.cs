@@ -1,7 +1,7 @@
 using System.Globalization;
 namespace BukStatus.Core.Samvirk;
 
-public record SamvirkMonthlyPayment(DateOnly Month, decimal? Coins, decimal? MinimumConfirmedAmount);
+public record SamvirkMonthlyPayment(DateOnly Month, decimal? Coins, decimal? MinimumConfirmedAmount, decimal? CalculatedAmount = null);
 public record SamvirkStatusRow(int PersonId, string Name, int? Age, decimal? MonthlyAmount, decimal? BehindAmount, SamvirkMonthlyPayment[] Payments);
 public record SamvirkStatusReport(DateOnly SnapshotDate, DateOnly[] Months, SamvirkStatusRow[] Active, SamvirkStatusRow[] Inactive, int UnknownStatus);
 
@@ -25,11 +25,25 @@ public static class SamvirkStatus
             var monthly = person.Amounts.GetValueOrDefault("On Track Amount NOK");
             var payments = months.Select(month =>
             {
-                var coins = person.Months.FirstOrDefault(m => m.Month == month)?.Coins;
+                var period = person.Months.FirstOrDefault(m => m.Month == month);
+                var coins = period?.Coins;
                 // Coins establish a threshold, not the exact transferred amount. Zero coins
                 // cannot distinguish no payment from a payment below the minimum.
                 decimal? confirmed = coins switch { 100 => monthly, 50 => minimumMonthlyAmount, _ => null };
-                return new SamvirkMonthlyPayment(month, coins, confirmed);
+                decimal? calculated = null;
+                // The undated remainder describes the export month only. Historical coins
+                // do not reveal exact payments or the monthly rate used at the time.
+                if (month == end && coins != 100 && monthly is > 0)
+                {
+                    var remaining = person.Amounts.GetValueOrDefault("Remaining Full Discount NOK") ?? period?.Remaining100;
+                    if (remaining is >= 0)
+                    {
+                        var paid = Math.Clamp(monthly.Value - remaining.Value, 0, monthly.Value);
+                        // Do not replace a confirmed coins threshold with a contradictory estimate.
+                        if (confirmed is null || paid >= confirmed.Value) calculated = paid;
+                    }
+                }
+                return new SamvirkMonthlyPayment(month, coins, confirmed, calculated);
             }).ToArray();
             return new(person.PersonId, person.Name, age, monthly,
                 person.Amounts.GetValueOrDefault("Get On Track Amount NOK"), payments);

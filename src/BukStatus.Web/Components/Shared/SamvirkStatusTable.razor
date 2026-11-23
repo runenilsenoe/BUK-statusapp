@@ -4,7 +4,7 @@
     <table class="samvirk-status">
         <caption>@Title · innbetalinger og status per @SnapshotDate.ToString("dd.MM.yyyy")</caption>
         <thead>
-            <tr><th rowspan="2" scope="col">Navn</th><th rowspan="2" scope="col">Alder</th><th rowspan="2" scope="col">Månedsbeløp NOK</th><th colspan="@Months.Length" scope="colgroup">Innbetaling fra coins · NOK</th><th rowspan="2" scope="col">Ligger bak NOK</th></tr>
+            <tr><th rowspan="2" scope="col">Navn</th><th rowspan="2" scope="col">Alder</th><th rowspan="2" scope="col">Månedsbeløp NOK</th><th colspan="@Months.Length" scope="colgroup">Betalt mot månedsbeløp · NOK</th><th rowspan="2" scope="col">Ligger bak NOK</th></tr>
             <tr>@foreach (var month in Months) { <th scope="col">@month.ToString("MMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("nb-NO"))</th> }</tr>
         </thead>
         <tbody>
@@ -15,7 +15,12 @@
                     @foreach (var payment in row.Payments)
                     {
                         <td>
-                            @if (payment.MinimumConfirmedAmount is { } amount)
+                            @if (payment.CalculatedAmount is { } paid)
+                            {
+                                <span title="Månedsbeløp minus gjenstående beløp for 100 coins">@Money(paid)</span>
+                                @if (payment.Coins is { } paidCoins) { <br /><small>@paidCoins coins</small> }
+                            }
+                            else if (payment.MinimumConfirmedAmount is { } amount)
                             {
                                 @if (payment.Coins == 100) { <span title="100 coins: fullt månedsbeløp bekreftet">✅@(amount.ToString("0.##"))+</span> }
                                 else { <span>≥ @Money(amount)</span><br /><small>@payment.Coins coins</small> }

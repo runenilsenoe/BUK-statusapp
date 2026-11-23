@@ -21,4 +21,50 @@ public class SamvirkStatusTests
         Assert.Equal(0,person.Payments[2].Coins); Assert.Null(person.Payments[2].MinimumConfirmedAmount);
         Assert.Equal(100,person.Payments[4].Coins); Assert.Equal(3375,person.Payments[4].MinimumConfirmedAmount);
     }
+    [Theory]
+    [InlineData(3375, 375, 50, 3000)]
+    [InlineData(2700, 1700, 0, 1000)]
+    [InlineData(2700, 2700, 0, 0)]
+    [InlineData(2700, 3400, 0, 0)]
+    [InlineData(3375, 0, 50, 3375)]
+    public void Current_month_paid_towards_full_discount_comes_from_remaining_amount(decimal monthly, decimal remaining, decimal coins, decimal expected)
+    {
+        var snapshot = Snapshot();
+        var person = snapshot.People[0] with
+        {
+            Amounts = new() { ["On Track Amount NOK"] = monthly, ["Remaining Full Discount NOK"] = remaining },
+            Months = [new(new(2025,12,1), null, 0, null, null), new(new(2026,1,1), null, coins, null, null)]
+        };
+        var row = Assert.Single(SamvirkStatus.Build(snapshot with { People = [person] }).Active);
+        Assert.Equal(expected, row.Payments[4].CalculatedAmount);
+        Assert.Null(row.Payments[3].CalculatedAmount);
+    }
+    [Fact]
+    public void Dated_current_month_remainder_is_used_when_undated_value_is_missing()
+    {
+        var snapshot = Snapshot();
+        var person = snapshot.People[0] with
+        {
+            Months = [new(new(2026,1,1), null, 0, null, 2375)],
+        };
+        Assert.Equal(1000, Assert.Single(SamvirkStatus.Build(snapshot with { People = [person] }).Active).Payments[4].CalculatedAmount);
+    }
+    [Fact]
+    public void Missing_or_inconsistent_remainders_do_not_override_coins_confirmation()
+    {
+        var snapshot = Snapshot();
+        SamvirkMonthlyPayment Payment(decimal? remaining, decimal coins) {
+            var person = snapshot.People[0] with {
+                Amounts = new() { ["On Track Amount NOK"] = 3375, ["Remaining Full Discount NOK"] = remaining },
+                Months = [new(new(2026,1,1), null, coins, null, null)] };
+            return Assert.Single(SamvirkStatus.Build(snapshot with { People = [person] }).Active).Payments[4];
+        }
+        Assert.Null(Payment(null, 0).CalculatedAmount);
+        Assert.Null(Payment(-1, 0).CalculatedAmount);
+        Assert.Null(Payment(3000, 50).CalculatedAmount);
+        Assert.Equal(2700, Payment(3000, 50).MinimumConfirmedAmount);
+        Assert.Null(Payment(500, 100).CalculatedAmount);
+        Assert.Equal(3375, Payment(500, 100).MinimumConfirmedAmount);
+    }
+
 }
