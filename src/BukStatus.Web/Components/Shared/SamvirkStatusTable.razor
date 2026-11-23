@@ -15,7 +15,11 @@
                     @foreach (var payment in row.Payments)
                     {
                         <td>
-                            @if (payment.MinimumConfirmedAmount is { } amount) { <span>≥ @Money(amount)</span><br /><small>@payment.Coins coins</small> }
+                            @if (payment.MinimumConfirmedAmount is { } amount)
+                            {
+                                @if (payment.Coins == 100) { <span title="100 coins: fullt månedsbeløp bekreftet">✅@(amount.ToString("0.##"))+</span> }
+                                else { <span>≥ @Money(amount)</span><br /><small>@payment.Coins coins</small> }
+                            }
                             else if (payment.Coins is { } coins) { <span>@coins coins</span><br /><small>Beløp ukjent</small> }
                             else { <span title="Månedsdata mangler">–</span> }
                         </td>

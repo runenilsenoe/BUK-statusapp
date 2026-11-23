@@ -137,8 +137,8 @@ public sealed class LoginFlowTests : IDisposable
         Assert.Contains("Inaktive (1)", html);
         Assert.Contains(new DateOnly(2025, 9, 1).ToString("MMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("nb-NO")), html);
         Assert.Contains(new DateOnly(2026, 1, 1).ToString("MMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("nb-NO")), html);
-        Assert.Contains("≥ 3", html);
-        Assert.Contains("100 coins", html);
+        Assert.Contains("✅3375+", html);
+        Assert.Contains("≥ 2", html);
         Assert.Contains("50 coins", html);
         Assert.Contains("Lagre minstebeløp", html);
     }
