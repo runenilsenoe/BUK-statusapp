@@ -30,5 +30,5 @@
     [Parameter, EditorRequired] public SamvirkStatusRow[] Rows { get; set; } = [];
     [Parameter, EditorRequired] public DateOnly[] Months { get; set; } = [];
     [Parameter] public DateOnly SnapshotDate { get; set; }
-    static string Money(decimal? value) => value?.ToString("N0") ?? "–";
+    static string Money(decimal? value) => value?.ToString("#,##0.##") ?? "–";
 }

@@ -27,7 +27,7 @@
         <button @onclick="SaveMinimum" disabled="@busy">Lagre minstebeløp</button>
         var report = SamvirkStatus.Build(latest, savedMinimumMonthlyAmount);
         <p>Aktiv/inaktiv følger «Active BUK Drive». Alder og femmånedersperioden gjelder eksportdatoen. Månedsbeløp er «On Track Amount NOK», og «Ligger bak» er «Get On Track Amount NOK».</p>
-        <p class="muted">100 coins bekrefter fullt månedsbeløp, 50 coins bekrefter minst @savedMinimumMonthlyAmount.ToString("N0") kr. Beløpene vises som minstebeløp (≥), utledet fra coins og satsene her. Eksporten har bare én månedssats; historiske satser og nøyaktige innbetalinger er ikke oppgitt. Ved 0 coins kan det fortsatt være betalt under minimum. «–» betyr at data mangler.</p>
+        <p class="muted">100 coins bekrefter fullt månedsbeløp, 50 coins bekrefter minst @savedMinimumMonthlyAmount.ToString("#,##0.##") kr. Beløpene vises som minstebeløp (≥), utledet fra coins og satsene her. Eksporten har bare én månedssats; historiske satser og nøyaktige innbetalinger er ikke oppgitt. Ved 0 coins kan det fortsatt være betalt under minimum. «–» betyr at data mangler.</p>
         @if (report.UnknownStatus > 0) { <p>@report.UnknownStatus personer mangler gyldig Active BUK Drive-status. De finnes i eksportdetaljene nedenfor.</p> }
         <SamvirkStatusTable Title="Aktive" Rows="report.Active" Months="report.Months" SnapshotDate="report.SnapshotDate" />
         <SamvirkStatusTable Title="Inaktive" Rows="report.Inactive" Months="report.Months" SnapshotDate="report.SnapshotDate" />
@@ -51,7 +51,7 @@
     string month = DateTime.Today.ToString("yyyy-MM");
     SamvirkPreview? preview;
     SamvirkSnapshot? latest;
-    static string Amount(decimal? value) => value?.ToString("N0") ?? "–";
+    static string Amount(decimal? value) => value?.ToString("#,##0.##") ?? "–";
     protected override async Task OnInitializedAsync()
     {
         try { await Access.RequireAsync(); authorized = true; latest = await Service.LatestAsync(); minimumMonthlyAmount = savedMinimumMonthlyAmount = await Service.GetMinimumAsync(); }
