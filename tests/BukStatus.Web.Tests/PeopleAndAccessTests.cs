@@ -2,6 +2,9 @@ using BukStatus.Core.Administration;
 using BukStatus.Core.Clubs;
 using BukStatus.Core.Groups;
 using BukStatus.Core.People;
+using BukStatus.Core.Status;
+using BukStatus.Core.Samvirk;
+using System.Text.Json;
 using BukStatus.Web.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -37,6 +40,43 @@ public sealed class PeopleAndAccessTests : IDisposable
         Assert.Equal("Follow up\nNext week", (await people.GetAllAsync())[0].FollowUp.Note);
         await people.SaveAsync(1, "", null);
         Assert.Null((await people.GetAllAsync())[0].FollowUp.Preference);
+    }
+    [Fact] public async Task People_include_contribution_totals_and_latest_confirmed_samvirk_amount_by_person_id()
+    {
+        SamvirkPerson Person(int id, decimal amount) => new(id, "Different export name", 49, null,
+            new(), new() { ["Get On Track Amount NOK"] = amount }, new(), []);
+        await using (var db = factory.CreateDbContext())
+        {
+            db.SamvirkImports.AddRange(
+                new() { Id = Guid.NewGuid(), Hash = "old", SnapshotDate = new(2026, 11, 1), ConfirmedAt = DateTimeOffset.UtcNow,
+                    DataJson = JsonSerializer.Serialize(new[] { Person(1, 500) }) },
+                new() { Id = Guid.NewGuid(), Hash = "latest", SnapshotDate = new(2026, 11, 10), ConfirmedAt = DateTimeOffset.UtcNow,
+                    DataJson = JsonSerializer.Serialize(new[] { Person(1, 4200), Person(999, 9000) }) },
+                new() { Id = Guid.NewGuid(), Hash = "pending", SnapshotDate = new(2026, 11, 20),
+                    DataJson = JsonSerializer.Serialize(new[] { Person(1, 100) }) });
+            await db.SaveChangesAsync();
+        }
+        var service = new PersonService(factory, directory, gate, statuses: new Contributions());
+        var rows = await service.GetAllAsync();
+        Assert.Equal(2, rows.Count);
+        var first = Assert.Single(rows, p => p.Member.Id == 1);
+        Assert.Equal(10000m, first.TotalTarget);
+        Assert.Equal(2500.50m, first.TotalContribution);
+        Assert.Equal(4200m, first.SamvirkGetOnTrack);
+        Assert.Equal(new DateOnly(2026, 11, 10), first.SamvirkSnapshotDate);
+        var second = Assert.Single(rows, p => p.Member.Id == 2);
+        Assert.Null(second.TotalTarget); Assert.Null(second.TotalContribution); Assert.Null(second.SamvirkGetOnTrack);
+        gate.Denied = true;
+        await Assert.ThrowsAsync<GroupException>(() => service.GetAllAsync());
+    }
+    sealed class Contributions : IMemberStatusService
+    {
+        public Task<IReadOnlyDictionary<int, MemberStatusSnapshot>> GetStatusesAsync(IEnumerable<int> ids, CancellationToken ct = default)
+        {
+            Assert.Equal([1, 2], ids.Order());
+            return Task.FromResult<IReadOnlyDictionary<int, MemberStatusSnapshot>>(new Dictionary<int, MemberStatusSnapshot>
+                { [1] = new(1, 2500.50m, 10000, 5000, null, 25) });
+        }
     }
     [Fact] public async Task Notes_require_admin_and_current_roster_membership_and_valid_values()
     {

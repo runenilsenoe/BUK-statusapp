@@ -2,6 +2,8 @@ using BukStatus.Core.Administration;
 using BukStatus.Core.Clubs;
 using BukStatus.Core.Groups;
 using Microsoft.EntityFrameworkCore;
+using BukStatus.Core.Status;
+using BukStatus.Core.Samvirk;
 
 namespace BukStatus.Core.People;
 
@@ -28,9 +30,11 @@ public interface IPersonDirectory
 {
     Task<ClubScope> GetAsync(CancellationToken ct = default);
 }
-public record PersonOverview(ClubMember Member, PersonFollowUp FollowUp, bool? MyshareCountedInAksjon = null);
+public record PersonOverview(ClubMember Member, PersonFollowUp FollowUp, bool? MyshareCountedInAksjon = null,
+    decimal? TotalTarget = null, decimal? TotalContribution = null, decimal? SamvirkGetOnTrack = null,
+    DateOnly? SamvirkSnapshotDate = null);
 
-public sealed class PersonService(IDbContextFactory<BukStatusDbContext> factory, IPersonDirectory directory, IWriteAccess access, IMyshareDirectory? myshare = null)
+public sealed class PersonService(IDbContextFactory<BukStatusDbContext> factory, IPersonDirectory directory, IWriteAccess access, IMyshareDirectory? myshare = null, IMemberStatusService? statuses = null, IClubContext? clubs = null)
 {
     public async Task<IReadOnlyList<PersonOverview>> GetAllAsync(CancellationToken ct = default)
     {
@@ -40,8 +44,16 @@ public sealed class PersonService(IDbContextFactory<BukStatusDbContext> factory,
         var saved = await db.PersonFollowUps.AsNoTracking().Where(p => p.ClubId == scope.Club.Id).ToDictionaryAsync(p => p.PersonId, ct);
         var campaign = myshare is null ? null : await myshare.GetCampaignAsync(scope, DateOnly.FromDateTime(DateTime.Today), ct);
         var flags = campaign?.ToDictionary(p => p.PersonId);
+        var contributions = statuses is null ? null : await statuses.GetStatusesAsync(scope.Club.Members.Select(p => p.Id), ct);
+        await using var clubDb = await factory.OpenForClubAsync(clubs, ct);
+        var snapshot = await SamvirkService.ReadLatestAsync(clubDb, ct);
+        var samvirk = snapshot?.People.ToDictionary(p => p.PersonId);
         return scope.Club.Members.OrderBy(p => p.DisplayName).Select(p => new PersonOverview(p,
-            saved.GetValueOrDefault(p.Id) ?? new() { ClubId = scope.Club.Id, PersonId = p.Id }, flags?.GetValueOrDefault(p.Id)?.IsCountedInAksjon)).ToArray();
+            saved.GetValueOrDefault(p.Id) ?? new() { ClubId = scope.Club.Id, PersonId = p.Id }, flags?.GetValueOrDefault(p.Id)?.IsCountedInAksjon,
+            contributions?.GetValueOrDefault(p.Id)?.TotalTarget,
+            contributions?.GetValueOrDefault(p.Id)?.TotalContribution,
+            samvirk?.GetValueOrDefault(p.Id)?.Amounts.GetValueOrDefault("Get On Track Amount NOK"),
+            snapshot?.SnapshotDate)).ToArray();
     }
     public async Task SaveAsync(int personId, string? note, WorkPreference? preference, CancellationToken ct = default, bool? excludedFromCampaign = null)
     {

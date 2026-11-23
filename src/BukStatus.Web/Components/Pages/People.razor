@@ -11,10 +11,13 @@
     <label>Søk etter navn eller person-ID <input type="search" @bind="search" @bind:event="oninput" disabled="@busy" /></label>
     <p>@Filtered.Count() av @people.Count personer</p>
     <div class="table-wrap"><table>
-        <thead><tr><th>Navn</th><th>Alder</th><th>Person-ID</th><th>Aksjon</th><th>MyShare</th><th>Ønske</th><th>Notat</th><th></th></tr></thead>
+        <thead><tr><th aria-sort="@SortDirection(PersonSort.Name)"><button type="button" class="sort-header" @onclick="() => SortBy(PersonSort.Name)">Navn @SortArrow(PersonSort.Name)</button></th><th>Alder</th><th>Person-ID</th><th aria-sort="@SortDirection(PersonSort.TotalTarget)"><button type="button" class="sort-header" @onclick="() => SortBy(PersonSort.TotalTarget)">Totalt bidragsmål (BUK, kr) @SortArrow(PersonSort.TotalTarget)</button></th>
+            <th aria-sort="@SortDirection(PersonSort.TotalContribution)"><button type="button" class="sort-header" @onclick="() => SortBy(PersonSort.TotalContribution)">Totalt bidrag (BUK, kr) @SortArrow(PersonSort.TotalContribution)</button></th>
+            <th aria-sort="@SortDirection(PersonSort.SamvirkGetOnTrack)"><button type="button" class="sort-header" @onclick="() => SortBy(PersonSort.SamvirkGetOnTrack)">Get on track (Samvirk, kr) @SortArrow(PersonSort.SamvirkGetOnTrack)</button></th>
+            <th>Aksjon</th><th>MyShare</th><th>Ønske</th><th>Notat</th><th></th></tr></thead>
         <tbody>@foreach (var person in Filtered)
         {
-            <tr @key="person.Member.Id"><th scope="row">@person.Member.DisplayName</th><td>@(person.Member.Age(DateOnly.FromDateTime(DateTime.Today))?.ToString() ?? "–")</td><td>@person.Member.Id</td><td>@(person.FollowUp.ExcludedFromCampaign ? "Teller ikke med" : "Teller med")</td><td>@(person.MyshareCountedInAksjon is { } counted ? (counted ? "Teller med" : "Teller ikke med") : "–")</td><td>@(person.FollowUp.Preference is { } p ? WorkPreferences.Labels.GetValueOrDefault(p) : "Ikke valgt")</td><td style="white-space:pre-wrap">@person.FollowUp.Note</td><td><button disabled="@busy" @onclick="() => Edit(person)">Rediger</button></td></tr>
+            <tr @key="person.Member.Id"><th scope="row">@person.Member.DisplayName</th><td>@(person.Member.Age(DateOnly.FromDateTime(DateTime.Today))?.ToString() ?? "–")</td><td>@person.Member.Id</td><td class="amount">@Money(person.TotalTarget)</td><td class="amount">@Money(person.TotalContribution)</td><td class="amount" title="@(person.SamvirkSnapshotDate is { } exportDate ? $"Samvirk per {exportDate:dd.MM.yyyy}" : null)">@Money(person.SamvirkGetOnTrack)</td><td>@(person.FollowUp.ExcludedFromCampaign ? "Teller ikke med" : "Teller med")</td><td>@(person.MyshareCountedInAksjon is { } counted ? (counted ? "Teller med" : "Teller ikke med") : "–")</td><td>@(person.FollowUp.Preference is { } p ? WorkPreferences.Labels.GetValueOrDefault(p) : "Ikke valgt")</td><td style="white-space:pre-wrap">@person.FollowUp.Note</td><td><button disabled="@busy" @onclick="() => Edit(person)">Rediger</button></td></tr>
         }</tbody>
     </table></div>
     @if (editing is not null)
@@ -48,7 +51,36 @@
     string? error, saved;
     WorkPreference? preference;
     bool busy, excludedFromCampaign;
-    IEnumerable<PersonOverview> Filtered => (people ?? []).Where(p => string.IsNullOrWhiteSpace(search) || p.Member.DisplayName.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase) || p.Member.Id.ToString().Contains(search.Trim()));
+    IEnumerable<PersonOverview> Matching => (people ?? []).Where(p => string.IsNullOrWhiteSpace(search) || p.Member.DisplayName.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase) || p.Member.Id.ToString().Contains(search.Trim()));
+    PersonSort sort = PersonSort.Name;
+    bool descending;
+    enum PersonSort { Name, TotalTarget, TotalContribution, SamvirkGetOnTrack }
+    decimal? Value(PersonOverview person) => sort switch
+    {
+        PersonSort.TotalTarget => person.TotalTarget,
+        PersonSort.TotalContribution => person.TotalContribution,
+        PersonSort.SamvirkGetOnTrack => person.SamvirkGetOnTrack,
+        _ => null
+    };
+    IEnumerable<PersonOverview> Filtered
+    {
+        get
+        {
+            if (sort == PersonSort.Name) return descending ? Matching.OrderByDescending(p => p.Member.DisplayName).ThenBy(p => p.Member.Id)
+                : Matching.OrderBy(p => p.Member.DisplayName).ThenBy(p => p.Member.Id);
+            var knownFirst = Matching.OrderBy(p => Value(p) is null);
+            var ordered = descending ? knownFirst.ThenByDescending(Value) : knownFirst.ThenBy(Value);
+            return ordered.ThenBy(p => p.Member.DisplayName).ThenBy(p => p.Member.Id);
+        }
+    }
+    void SortBy(PersonSort column)
+    {
+        if (sort == column) descending = !descending;
+        else { sort = column; descending = column != PersonSort.Name; }
+    }
+    string SortDirection(PersonSort column) => sort != column ? "none" : descending ? "descending" : "ascending";
+    string SortArrow(PersonSort column) => sort != column ? "↕" : descending ? "↓" : "↑";
+    static string Money(decimal? amount) => amount?.ToString("#,##0.##", System.Globalization.CultureInfo.GetCultureInfo("nb-NO")) ?? "–";
     protected override async Task OnInitializedAsync()
     {
         try { people = await Service.GetAllAsync(); }
