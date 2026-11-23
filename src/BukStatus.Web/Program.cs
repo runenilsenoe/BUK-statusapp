@@ -32,6 +32,7 @@ builder.Services.AddSingleton<BukStatus.Web.Notifications.IAccessRequestMail, Bu
 builder.Services.AddHostedService<BukStatus.Web.Notifications.AccessRequestNotifier>();
 builder.Services.AddScoped<IClubContext, ClubContext>();
 builder.Services.AddScoped<BukStatus.Core.People.IPersonDirectory, PersonDirectory>();
+builder.Services.AddScoped<BukStatus.Core.Pot.IPotRoster, PotRoster>();
 builder.Services.AddHttpClient<IMyshareDirectory, MyshareDirectory>(c => c.Timeout = TimeSpan.FromSeconds(30))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddRazorComponents()

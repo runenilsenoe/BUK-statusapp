@@ -1,4 +1,5 @@
 using BukStatus.Core.Groups;
+using BukStatus.Core.Clubs;
 using BukStatus.Core.Pot;
 using BukStatus.Core.Status;
 using BukStatus.Core.Teams;
@@ -15,6 +16,7 @@ public sealed class PotServiceTests : IDisposable
     private readonly TeamService _teams;
     private readonly GroupService _groups;
     private readonly PotService _pot;
+    private readonly TestDbContextFactory _factory;
 
     public PotServiceTests()
     {
@@ -22,7 +24,7 @@ public sealed class PotServiceTests : IDisposable
         var options = new DbContextOptionsBuilder<BukStatusDbContext>().UseSqlite(_connection).Options;
         using (var db = new BukStatusDbContext(options))
             db.Database.Migrate();
-        var factory = new TestDbContextFactory(options);
+        var factory = _factory = new TestDbContextFactory(options);
         _teams = new TeamService(factory);
         _groups = new GroupService(factory);
         var extra = new ExtraContributionsService([], new MemoryCache(new MemoryCacheOptions()),
@@ -117,6 +119,66 @@ public sealed class PotServiceTests : IDisposable
 
         var sources = await _pot.GetSourcesAsync();
         Assert.Equal(["lag", PotSource.TeamKey(a.Id), PotSource.TeamKey(b.Id), PotSource.GroupKey(group.Id)], sources.Select(s => s.Key));
+    }
+
+    [Fact]
+    public async Task Default_covers_complete_roster_even_without_teams_and_team_selection_remains_limited()
+    {
+        var roster = new Roster();
+        var extra = new ExtraContributionsService([], new MemoryCache(new MemoryCacheOptions()), NullLogger<ExtraContributionsService>.Instance);
+        var pot = new PotService(_factory, _teams, _groups, new FakeMemberStatusService(), extra, TimeProvider.System, roster: roster);
+        var emptyTeams = await pot.GetScreenAsync(null, 0, PotStrategy.Even);
+        Assert.Equal([1, 2, 3, 4], emptyTeams.Result.Members.Select(m => m.PersonId).Order());
+        Assert.Equal("BUK test", emptyTeams.Source.Name);
+        var team = await _teams.CreateAsync("Only one");
+        await _teams.AddMemberAsync(team.Id, 1, "Local name");
+        var group = await _groups.CreateAsync("Only group");
+        await _groups.AddMemberAsync(group.Id, 2, "Local name");
+        var all = await pot.GetScreenAsync(PotSource.AllTeamsKey, 0, PotStrategy.Even);
+        Assert.Equal(4, all.Result.Count);
+        Assert.Contains(all.Result.Members, m => m.PersonId == 4 && m.DisplayName == "No team");
+        Assert.Equal([1], (await pot.GetScreenAsync(PotSource.TeamKey(team.Id), 0, PotStrategy.Even)).Result.Members.Select(m => m.PersonId));
+        Assert.Equal([2], (await pot.GetScreenAsync(PotSource.GroupKey(group.Id), 0, PotStrategy.Even)).Result.Members.Select(m => m.PersonId));
+        Assert.Equal("Alle i BUK test", (await pot.GetSourcesAsync())[0].Name);
+        roster.Denied = true;
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => pot.GetScreenAsync(null, 0, PotStrategy.Even));
+    }
+
+    [Fact]
+    public async Task Local_only_default_includes_group_only_people_and_deduplicates_overlapping_members()
+    {
+        var team = await _teams.CreateAsync("Team"); await _teams.AddMemberAsync(team.Id, 1, null);
+        var group = await _groups.CreateAsync("Group");
+        await _groups.AddMemberAsync(group.Id, 1, null); await _groups.AddMemberAsync(group.Id, 2, null);
+        Assert.Equal([1, 2], (await _pot.GetScreenAsync(null, 0, PotStrategy.Even)).Result.Members.Select(m => m.PersonId).Order());
+    }
+
+    [Fact]
+    public async Task Own_contribution_from_member_without_team_is_not_counted_as_extra()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var json = "{\"statusCode\":200,\"data\":[{\"userId\":4,\"transactionDate\":\"" + today.ToString("yyyy-MM-dd") + "\",\"amount\":500},{\"userId\":900,\"transactionDate\":\"" + today.ToString("yyyy-MM-dd") + "\",\"amount\":100}]}";
+        var source = new MyshareExtraContributionsSource(new HttpFactory(json), Microsoft.Extensions.Options.Options.Create(new MyshareOptions { BaseUrl = "https://synthetic.example/api", Bearer = "synthetic", ClubId = 4050 }));
+        var extra = new ExtraContributionsService([source], new MemoryCache(new MemoryCacheOptions()), NullLogger<ExtraContributionsService>.Instance);
+        var pot = new PotService(_factory, _teams, _groups, new FakeMemberStatusService(), extra, TimeProvider.System, roster: new Roster());
+        await pot.SaveSettingsAsync(new PotSettings { Title = "Test", ExtraMode = ExtraContributionsMode.Automatic });
+        var result = await pot.GetScreenAsync(null, 0, PotStrategy.Even);
+        Assert.Equal(4, result.Result.Count);
+        Assert.Equal(100, result.Extra.Amount); Assert.Equal(1, result.Extra.Count);
+    }
+    private sealed class HttpFactory(string json) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(new Handler(json));
+    }
+    private sealed class Handler(string json) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(json) });
+    }
+
+    private sealed class Roster : IPotRoster
+    {
+        public bool Denied;
+        public Task<ClubScope?> GetAsync(CancellationToken ct = default) => Denied ? throw new UnauthorizedAccessException() : Task.FromResult<ClubScope?>(new(new(4050, 10016, "BUK test", [new(1,"One",null,null,null,20),new(2,"Two",null,null,null,21),new(3,"Three",null,null,null,22),new(4,"No team",null,null,null,23)]),4050));
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<BukStatusDbContext> options)

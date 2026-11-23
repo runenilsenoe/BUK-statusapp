@@ -17,7 +17,7 @@ public sealed class PersonDirectory(IClubContext clubs, IMyshareDirectory direct
         if (clubs.Enabled) return await clubs.GetSelectedAsync(ct) ?? throw new UnauthorizedAccessException();
         var user = http.HttpContext?.User;
         if (user?.Identity?.IsAuthenticated != true) user = (await authentication.GetAuthenticationStateAsync()).User;
-        var id = user.PersonId();
+        var id = user.Identity?.AuthenticationType == ApiKeyAuthenticationHandler.SchemeName ? access.Value.ApiPersonId : user.PersonId();
         if (user.Identity?.IsAuthenticated != true || id is not > 0) throw new UnauthorizedAccessException();
         var available = await directory.GetClubsAsync(id.Value, ct);
         var clubId = options.Value.ClubId > 0 ? options.Value.ClubId : access.Value.LegacyClubId;

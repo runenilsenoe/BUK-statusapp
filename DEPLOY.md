@@ -228,3 +228,12 @@ separat og vises i eksportdetaljene.
   Vellykket sending markeres; et krasj akkurat etter sending kan gi et duplikat
   ved omstart (minst én levering). E-post inneholder navn, BCC-ID og en fast lenke
   til adminpanelet, aldri personnotater eller økonomiske data.
+
+Pottens standardvalg («Alle i …», eksisterende `source=lag` beholdes) bruker hele
+MyShare-klubbregisteret, også personer som verken har lag eller gruppe. I legacy
+innlogget modus brukes samme medlemsregister som personoversikten. Medlemmenes
+egne transaksjoner utelates fra ekstrabidrag, uansett lagtilhørighet. Et eksplisitt
+valg av lag/gruppe avgrenser fortsatt simuleringen. Uten personidentitet (lokale
+testdata eller gammel anonym storskjerm) brukes alle lokalt registrerte personer
+fra både lag og grupper, uten duplikater. Feil ved innhenting av den innloggede
+MyShare-listen skal vises som feil fremfor en ufullstendig lagbasert totalsum.

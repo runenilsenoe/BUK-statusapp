@@ -12,6 +12,7 @@
 <div class="pot @(bigScreen ? "pot-big" : "")">
     <div class="page-header">
         <h1>Pott@(screen is null ? "" : $": {screen.Source.Name}")</h1>
+        <p class="muted">Uten valg av lag eller gruppe gjelder potten alle i klubben, også personer uten lag.</p>
         <div class="actions">
             <select @bind="sourceKey" @bind:after="SourceChanged" aria-label="Hvem skjermen gjelder">
                 @foreach (var source in sources)

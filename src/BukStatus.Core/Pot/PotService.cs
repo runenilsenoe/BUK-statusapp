@@ -7,7 +7,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BukStatus.Core.Pot;
 
-/// <summary>Who the pot screen covers: everyone on a team, one team, or one group.</summary>
+/// <summary>Resolves a complete authorized club roster, also for the legacy site's signed-in users.</summary>
+public interface IPotRoster
+{
+    Task<ClubScope?> GetAsync(CancellationToken ct = default);
+}
+
+/// <summary>Who the pot screen covers: all club members, one team, or one group.</summary>
 public record PotSource(string Key, string Name)
 {
     public const string AllTeamsKey = "lag";
@@ -30,7 +36,7 @@ public class PotService(
     GroupService groups,
     IMemberStatusService statuses,
     ExtraContributionsService extraContributions,
-    TimeProvider time, IClubContext? clubContext = null, BukStatus.Core.Administration.IWriteAccess? writeAccess = null)
+    TimeProvider time, IClubContext? clubContext = null, BukStatus.Core.Administration.IWriteAccess? writeAccess = null, IPotRoster? roster = null)
 {
     public DateOnly Today => DateOnly.FromDateTime(time.GetLocalNow().DateTime);
 
@@ -85,17 +91,17 @@ public class PotService(
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>All teams first, then each team, then each group.</summary>
+    /// <summary>All club members first, then each team, then each group.</summary>
     public async Task<List<PotSource>> GetSourcesAsync(CancellationToken cancellationToken = default)
     {
-        var scope = clubContext is null ? null : await clubContext.GetSelectedAsync(cancellationToken);
-        var sources = new List<PotSource> { new(PotSource.AllTeamsKey, scope is null ? "Alle lag" : $"Hele {scope.Club.Name}") };
+        var scope = await GetScopeAsync(cancellationToken);
+        var sources = new List<PotSource> { new(PotSource.AllTeamsKey, scope is null ? "Alle registrerte personer" : $"Alle i {scope.Club.Name}") };
         sources.AddRange((await teams.GetAllAsync(cancellationToken)).Select(t => new PotSource(PotSource.TeamKey(t.Id), $"Lag: {t.Name}")));
         sources.AddRange((await groups.GetAllAsync(cancellationToken)).Select(g => new PotSource(PotSource.GroupKey(g.Id), $"Gruppe: {g.Name}")));
         return sources;
     }
 
-    /// <param name="sourceKey">See <see cref="PotSource"/>; null or unknown means all teams.</param>
+    /// <param name="sourceKey">See <see cref="PotSource"/>; null or unknown means all club members.</param>
     /// <param name="simulated">Made-up extra on top of the real extra contributions ("Simulere pott").</param>
     public async Task<PotScreen> GetScreenAsync(string? sourceKey, decimal simulated, PotStrategy strategy,
         CancellationToken cancellationToken = default)
@@ -116,12 +122,12 @@ public class PotService(
     }
 
     /// <summary>
-    /// The real extra contributions. Everyone on a team or in a group counts as a member, so their own
+    /// The real extra contributions. Everyone in the club counts as a member, so their own
     /// contributions are never extra, whichever source the screen shows.
     /// </summary>
     public async Task<ExtraContributionsResult> GetExtraContributionsAsync(PotSettings settings, CancellationToken cancellationToken = default)
     {
-        var scope = clubContext is null ? null : await clubContext.GetSelectedAsync(cancellationToken);
+        var scope = await GetScopeAsync(cancellationToken);
         return await extraContributions.GetAsync(settings, await GetAllMemberIdsAsync(cancellationToken), Today, cancellationToken,
             scope?.Club.Id, scope?.Club.TeamId);
     }
@@ -130,14 +136,14 @@ public class PotService(
     public async Task<IReadOnlyList<(string Name, bool Available)>> DescribeExtraSourcesAsync(PotSettings settings,
         CancellationToken cancellationToken = default)
     {
-        var scope = clubContext is null ? null : await clubContext.GetSelectedAsync(cancellationToken);
+        var scope = await GetScopeAsync(cancellationToken);
         return extraContributions.Describe(settings.ToQuery(await GetAllMemberIdsAsync(cancellationToken), Today)
             with { ClubId = scope?.Club.Id, TeamId = scope?.Club.TeamId });
     }
 
     private async Task<HashSet<int>> GetAllMemberIdsAsync(CancellationToken cancellationToken)
     {
-        var scope = clubContext is null ? null : await clubContext.GetSelectedAsync(cancellationToken);
+        var scope = await GetScopeAsync(cancellationToken);
         if (scope is not null) return scope.Club.Members.Select(m => m.Id).ToHashSet();
         var ids = (await teams.GetAllAsync(cancellationToken)).SelectMany(t => t.Members).Select(m => m.PersonId).ToHashSet();
         ids.UnionWith((await groups.GetAllAsync(cancellationToken)).SelectMany(g => g.Members).Select(m => m.PersonId));
@@ -155,14 +161,22 @@ public class PotService(
             return (new PotSource(PotSource.TeamKey(team.Id), team.Name),
                 team.Members.Select(m => (m.PersonId, m.DisplayName)).ToList());
 
-        var scope = clubContext is null ? null : await clubContext.GetSelectedAsync(cancellationToken);
+        var scope = await GetScopeAsync(cancellationToken);
         if (scope is not null)
             return (new PotSource(PotSource.AllTeamsKey, scope.Club.Name),
                 scope.Club.Members.Select(m => (m.Id, (string?)m.DisplayName)).ToList());
 
-        var all = await teams.GetAllAsync(cancellationToken);
-        return (new PotSource(PotSource.AllTeamsKey, "Alle lag"),
-            all.SelectMany(t => t.Members).Select(m => (m.PersonId, m.DisplayName)).ToList());
+        // Local-only development / anonymous legacy screen: include group-only people too.
+        var all = (await teams.GetAllAsync(cancellationToken)).SelectMany(t => t.Members).Select(m => (m.PersonId, m.DisplayName))
+            .Concat((await groups.GetAllAsync(cancellationToken)).SelectMany(g => g.Members).Select(m => (m.PersonId, m.DisplayName)));
+        return (new PotSource(PotSource.AllTeamsKey, "Alle registrerte personer"),
+            all.DistinctBy(m => m.PersonId).ToList());
+    }
+
+    private async Task<ClubScope?> GetScopeAsync(CancellationToken ct)
+    {
+        var selected = clubContext is null ? null : await clubContext.GetSelectedAsync(ct);
+        return selected ?? (roster is null ? null : await roster.GetAsync(ct));
     }
 
     private static int? TryParseId(string? key, string prefix) =>
