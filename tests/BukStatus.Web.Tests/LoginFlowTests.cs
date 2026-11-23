@@ -135,7 +135,9 @@ public sealed class LoginFlowTests : IDisposable
         var html = System.Net.WebUtility.HtmlDecode(await page.Content.ReadAsStringAsync());
         Assert.Contains("Aktive (1)", html);
         Assert.Contains("Inaktive (1)", html);
-        Assert.Contains(new DateOnly(2025, 9, 1).ToString("MMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("nb-NO")), html);
+        Assert.DoesNotContain(new DateOnly(2025, 9, 1).ToString("MMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("nb-NO")), html);
+        Assert.Contains("5 måneder", html);
+        Assert.Contains("aria-expanded=\"false\"", html);
         Assert.Contains(new DateOnly(2026, 1, 1).ToString("MMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("nb-NO")), html);
         Assert.Contains("✅3375+", html);
         Assert.Contains("≥ 2", html);

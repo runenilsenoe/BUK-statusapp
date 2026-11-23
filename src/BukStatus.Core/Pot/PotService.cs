@@ -118,12 +118,13 @@ public class PotService(
         await using var centralDb = await dbFactory.CreateDbContextAsync(cancellationToken);
         var excluded = scope is null ? new HashSet<int>() : (await centralDb.PersonFollowUps.AsNoTracking()
             .Where(p => p.ClubId == scope.Club.Id && p.ExcludedFromCampaign).Select(p => p.PersonId).ToListAsync(cancellationToken)).ToHashSet();
+        // Samvirk participation comes from Active BUK Drive, independently of a BUK contribution plan.
+        var samvirkMemberIds = members.Where(m => !excluded.Contains(m.PersonId)).Select(m => m.PersonId).ToArray();
         members = members.Where(m => !excluded.Contains(m.PersonId)
             && (campaignById is null || campaignById.TryGetValue(m.PersonId, out var participant)
                 && participant.IsCountedInAksjon == true))
             .Select(m => (m.PersonId, DisplayName: FirstName(rosterById?.GetValueOrDefault(m.PersonId)?.DisplayName,
                 campaignById?.GetValueOrDefault(m.PersonId)?.Name, m.DisplayName))).ToList();
-        var samvirkMemberIds = members.Select(m => m.PersonId).ToArray();
         var statusTask = statuses.GetStatusesAsync(members.Select(m => m.PersonId), cancellationToken);
         var extraTask = GetExtraContributionsAsync(settings, cancellationToken);
         var memberStatuses = await statusTask;

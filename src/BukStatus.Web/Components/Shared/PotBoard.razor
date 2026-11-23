@@ -31,8 +31,8 @@
                 <span class="muted small">
                     @if (Screen.Samvirk is { } samvirk)
                     {
-                        <text>@samvirk.OnTrackCount av @samvirk.ActiveCount aktive ajour · @samvirk.SnapshotDate.ToString("dd.MM.yyyy")</text>
-                        @if (samvirk.UnknownCount > 0) { <text> · @samvirk.UnknownCount mangler status</text> }
+                        <text>@samvirk.TotalCoins.ToString("#,##0.##") av @samvirk.MaximumCoins.ToString("#,##0.##") coins · @samvirk.SnapshotDate.ToString("dd.MM.yyyy")</text>
+                        @if (samvirk.UnknownCount > 0) { <text> · @samvirk.UnknownCount mangler gyldige coins</text> }
                     }
                     else { <text>Manuelt angitt</text> }
                 </span>

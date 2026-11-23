@@ -177,7 +177,8 @@ public sealed class PotServiceTests : IDisposable
         await _teams.AddMemberAsync(team.Id, 2, "Two");
         await _teams.AddMemberAsync(team.Id, 3, "Three");
         SamvirkPerson Person(int id, bool active, string? status) => new(id, $"Name {id}", 49, null,
-            new() { ["Active BUK Drive"] = active.ToString(), ["On Track Status"] = status }, new(), new(), []);
+            new() { ["Active BUK Drive"] = active.ToString(), ["On Track Status"] = status }, new(), new(),
+            [new(new(2026,11,1), null, status is null ? null : status == "OnTrack" ? 100 : 0, null, null)]);
         async Task Import(DateOnly date, DateTimeOffset? confirmed, SamvirkPerson[] people)
         {
             await using var db = _factory.CreateDbContext();
@@ -211,6 +212,10 @@ public sealed class PotServiceTests : IDisposable
         {
             db.PersonFollowUps.Add(new() { ClubId = 4050, PersonId = 2, ExcludedFromCampaign = true });
             db.PersonFollowUps.Add(new() { ClubId = 6817, PersonId = 1, ExcludedFromCampaign = true });
+            db.SamvirkImports.Add(new() { Id = Guid.NewGuid(), Hash = "campaign-samvirk", SnapshotDate = new(2026, 11, 10),
+                ConfirmedAt = DateTimeOffset.UtcNow, DataJson = JsonSerializer.Serialize(Enumerable.Range(1,4).Select(id =>
+                    new SamvirkPerson(id, $"Person {id}", 49, null, new() { ["Active BUK Drive"] = "True" }, new(), new(),
+                    [new(new(2026,11,1), null, 50, null, null)]))) });
             await db.SaveChangesAsync();
         }
         var extra = new ExtraContributionsService([], new MemoryCache(new MemoryCacheOptions()), NullLogger<ExtraContributionsService>.Instance);
@@ -218,6 +223,9 @@ public sealed class PotServiceTests : IDisposable
         var screen = await pot.GetScreenAsync(PotSource.TeamKey(team.Id), 0, PotStrategy.Even);
         var member = Assert.Single(screen.Result.Members);
         Assert.Equal(1, member.PersonId); Assert.Equal("One", member.DisplayName);
+        Assert.Equal(3, screen.Samvirk!.ActiveCount); // Includes active Samvirk savers without a BUK plan or counted flag.
+        Assert.Equal(150, screen.Samvirk.TotalCoins);
+        Assert.Equal(50, screen.SamvirkPercent);
     }
     private sealed class Campaign : IMyshareDirectory
     {

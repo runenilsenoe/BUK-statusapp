@@ -1,0 +1,17 @@
+@using BukStatus.Core.Samvirk
+@if (Payment.CalculatedAmount is { } paid)
+{
+    <span title="Månedsbeløp minus gjenstående beløp for 100 coins">@Money(paid)</span>
+    @if (Payment.Coins is { } paidCoins) { <br /><small>@paidCoins coins</small> }
+}
+else if (Payment.MinimumConfirmedAmount is { } amount)
+{
+    @if (Payment.Coins == 100) { <span title="100 coins: fullt månedsbeløp bekreftet">✅@(amount.ToString("0.##"))+</span> }
+    else { <span>≥ @Money(amount)</span><br /><small>@Payment.Coins coins</small> }
+}
+else if (Payment.Coins is { } coins) { <span>@coins coins</span><br /><small>Beløp ukjent</small> }
+else { <span title="Månedsdata mangler">–</span> }
+@code {
+    [Parameter, EditorRequired] public SamvirkMonthlyPayment Payment { get; set; } = default!;
+    static string Money(decimal? value) => value?.ToString("#,##0.##") ?? "–";
+}

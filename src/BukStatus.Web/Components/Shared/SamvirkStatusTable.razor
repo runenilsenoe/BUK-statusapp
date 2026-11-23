@@ -2,34 +2,35 @@
 <h3>@Title (@Rows.Length)</h3>
 <div style="overflow-x:auto">
     <table class="samvirk-status">
-        <caption>@Title · innbetalinger og status per @SnapshotDate.ToString("dd.MM.yyyy")</caption>
+        <caption>@Title · status per @SnapshotDate.ToString("dd.MM.yyyy")</caption>
         <thead>
-            <tr><th rowspan="2" scope="col">Navn</th><th rowspan="2" scope="col">Alder</th><th rowspan="2" scope="col">Månedsbeløp NOK</th><th colspan="@Months.Length" scope="colgroup">Betalt mot månedsbeløp · NOK</th><th rowspan="2" scope="col">Ligger bak NOK</th></tr>
-            <tr>@foreach (var month in Months) { <th scope="col">@month.ToString("MMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("nb-NO"))</th> }</tr>
+            <tr><th scope="col">Navn</th><th scope="col">Alder</th><th scope="col">Månedsbeløp NOK</th><th scope="col">Betalt @CurrentMonth.ToString("MMM yyyy", Culture)</th><th scope="col">Ligger bak NOK</th><th scope="col">Historikk</th></tr>
         </thead>
         <tbody>
-            @if (Rows.Length == 0) { <tr><td colspan="@(4 + Months.Length)">Ingen personer i denne kategorien.</td></tr> }
+            @if (Rows.Length == 0) { <tr><td colspan="6">Ingen personer i denne kategorien.</td></tr> }
             @foreach (var row in Rows)
             {
+                var current = row.Payments.FirstOrDefault(p => p.Month == CurrentMonth);
+                var open = expanded.Contains(row.PersonId);
+                var historyId = $"samvirk-history-{row.PersonId}";
                 <tr @key="row.PersonId"><th scope="row">@row.Name</th><td>@(row.Age?.ToString() ?? "–")</td><td>@Money(row.MonthlyAmount)</td>
-                    @foreach (var payment in row.Payments)
-                    {
-                        <td>
-                            @if (payment.CalculatedAmount is { } paid)
+                    <td>@if (current is not null) { <SamvirkPaymentValue Payment="current" /> } else { <span>–</span> }</td>
+                    <td>@Money(row.BehindAmount)</td>
+                    <td><button type="button" aria-expanded="@(open ? "true" : "false")" aria-controls="@historyId" aria-label="@( $"{(open ? "Skjul" : "Vis")} fem måneder for {row.Name}" )" @onclick="() => Toggle(row.PersonId)">@(open ? "Skjul" : "5 måneder")</button></td>
+                </tr>
+                @if (open)
+                {
+                    <tr @key="historyId" class="history-row"><td colspan="6" id="@historyId">
+                        <table class="payment-history" aria-label="@($"Innbetalinger for {row.Name}")">
+                            <thead><tr>@foreach (var month in Months) { <th scope="col">@month.ToString("MMM yyyy", Culture)</th> }</tr></thead>
+                            <tbody><tr>@foreach (var month in Months)
                             {
-                                <span title="Månedsbeløp minus gjenstående beløp for 100 coins">@Money(paid)</span>
-                                @if (payment.Coins is { } paidCoins) { <br /><small>@paidCoins coins</small> }
-                            }
-                            else if (payment.MinimumConfirmedAmount is { } amount)
-                            {
-                                @if (payment.Coins == 100) { <span title="100 coins: fullt månedsbeløp bekreftet">✅@(amount.ToString("0.##"))+</span> }
-                                else { <span>≥ @Money(amount)</span><br /><small>@payment.Coins coins</small> }
-                            }
-                            else if (payment.Coins is { } coins) { <span>@coins coins</span><br /><small>Beløp ukjent</small> }
-                            else { <span title="Månedsdata mangler">–</span> }
-                        </td>
-                    }
-                    <td>@Money(row.BehindAmount)</td></tr>
+                                var payment = row.Payments.FirstOrDefault(p => p.Month == month);
+                                <td>@if (payment is not null) { <SamvirkPaymentValue Payment="payment" /> } else { <span>–</span> }</td>
+                            }</tr></tbody>
+                        </table>
+                    </td></tr>
+                }
             }
         </tbody>
     </table>
@@ -39,5 +40,9 @@
     [Parameter, EditorRequired] public SamvirkStatusRow[] Rows { get; set; } = [];
     [Parameter, EditorRequired] public DateOnly[] Months { get; set; } = [];
     [Parameter] public DateOnly SnapshotDate { get; set; }
+    readonly HashSet<int> expanded = [];
+    static readonly System.Globalization.CultureInfo Culture = System.Globalization.CultureInfo.GetCultureInfo("nb-NO");
+    DateOnly CurrentMonth => new(SnapshotDate.Year, SnapshotDate.Month, 1);
+    void Toggle(int personId) { if (!expanded.Remove(personId)) expanded.Add(personId); }
     static string Money(decimal? value) => value?.ToString("#,##0.##") ?? "–";
 }
