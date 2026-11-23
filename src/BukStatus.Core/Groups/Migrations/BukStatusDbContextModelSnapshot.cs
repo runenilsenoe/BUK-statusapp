@@ -82,6 +82,31 @@ namespace BukStatus.Core.Groups.Migrations
                     b.ToTable("Administrators");
                 });
 
+            modelBuilder.Entity("BukStatus.Core.Clubs.MyshareUserSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PersonId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ProtectedTokens")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("MyshareUserSessions");
+                });
+
             modelBuilder.Entity("BukStatus.Core.Groups.Group", b =>
                 {
                     b.Property<int>("Id")

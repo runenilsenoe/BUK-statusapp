@@ -12,6 +12,7 @@ public class BukStatusDbContext(DbContextOptions<BukStatusDbContext> options) : 
     public DbSet<BukStatus.Core.People.PersonFollowUp> PersonFollowUps => Set<BukStatus.Core.People.PersonFollowUp>();
     public DbSet<BukStatus.Core.Administration.AccessRequest> AccessRequests => Set<BukStatus.Core.Administration.AccessRequest>();
     public DbSet<BukStatus.Core.Administration.AccessNotificationSettings> AccessNotificationSettings => Set<BukStatus.Core.Administration.AccessNotificationSettings>();
+    public DbSet<BukStatus.Core.Clubs.MyshareUserSession> MyshareUserSessions => Set<BukStatus.Core.Clubs.MyshareUserSession>();
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
     public DbSet<Team> Teams => Set<Team>();
@@ -37,6 +38,8 @@ public class BukStatusDbContext(DbContextOptions<BukStatusDbContext> options) : 
         modelBuilder.Entity<BukStatus.Core.Administration.AccessRequest>().Property(r => r.DisplayName).HasMaxLength(200);
         modelBuilder.Entity<BukStatus.Core.Administration.AccessNotificationSettings>().Property(r => r.Id).ValueGeneratedNever();
         modelBuilder.Entity<BukStatus.Core.Administration.AccessNotificationSettings>().Property(r => r.Recipient).HasMaxLength(254);
+
+        modelBuilder.Entity<BukStatus.Core.Clubs.MyshareUserSession>().HasKey(s => s.Id);
 
         modelBuilder.Entity<Team>(team =>
         {

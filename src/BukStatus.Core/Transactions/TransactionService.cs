@@ -11,6 +11,7 @@ public record TransactionResult(IReadOnlyList<ExtraContribution> Rows, string So
 public sealed class TransactionService(IEnumerable<IExtraContributionsSource> sources, IClubContext clubs,
     IDbContextFactory<BukStatusDbContext> factory, IMemoryCache cache, BukStatus.Core.Administration.IWriteAccess access)
 {
+    private readonly Guid cachePartition = Guid.NewGuid();
     public async Task<TransactionResult> GetAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
     {
         await access.RequireAsync(ct);
@@ -25,11 +26,12 @@ public sealed class TransactionService(IEnumerable<IExtraContributionsSource> so
         var eligible = sources.Where(s => s.CanHandle(query) && (scope is null || s is MyshareExtraContributionsSource))
             .OrderBy(s => s is MyshareExtraContributionsSource ? 0 : 1).ToArray();
         var source = eligible.FirstOrDefault() ?? throw new GroupException("Ingen transaksjonskilde er konfigurert for klubben. Kontroller MyShare-tilgangen eller BCC org-ID under Pott-innstillinger.");
-        var key = $"transactions:{scope?.Club.Id}:{scope?.Club.TeamId}:{query.OrgId}:{source.Name}:{from}:{to}";
+        var key = $"transactions:{cachePartition}:{scope?.Club.Id}:{scope?.Club.TeamId}:{query.OrgId}:{source.Name}:{from}:{to}";
         if (!cache.TryGetValue(key, out TransactionResult? result) || result is null)
         {
             IReadOnlyList<ExtraContribution> rows;
             try { rows = await source.GetAsync(query, ct); }
+            catch (MyshareDirectoryException) { throw; }
             catch (Exception ex) when (ex is not OperationCanceledException) { throw new GroupException("Kunne ikke hente transaksjoner. Kontroller API-tilgang og prøv igjen."); }
             result = new(rows.Where(r => r.Date >= from && r.Date <= to).OrderByDescending(r => r.Date).ThenByDescending(r => r.Id).ToArray(), source.Name, DateTimeOffset.UtcNow);
             cache.Set(key, result, TimeSpan.FromMinutes(10));

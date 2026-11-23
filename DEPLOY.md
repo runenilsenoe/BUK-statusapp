@@ -243,3 +243,33 @@ hvis MyShare ikke svarer eller ikke er konfigurert. Navnesøket viser da kun
 lokalt lagrede personer og merkes tydelig som ufullstendig. Klubbmodus bruker
 aldri denne reserveløsningen, siden MyShare avgjør klubbtilgangen. HTTP 401 og
 403 vises med hver sin forklaring; ingen tokens eller svarinnhold vises.
+
+## MyShare via BCC-brukerinnlogging
+
+Bruk «Koble til MyShare» i navigasjonen (`/account/myshare/connect`). Denne
+innloggingen ber login.bcc.no om `audience=https://myshare.today/api/` og
+`openid profile email offline_access mfa`, som MyShare-admin sin offentlige
+klientkonfigurasjon. Appen bruker sin egen BCC OAuth-klient og registrerte
+`/signin-auth0`-callback, aldri MyShare sin klient-ID. Både brukerens MyShare-rolle
+og OAuth-klientens tilgang til API-audience/offline_access må være godkjent av BCC.
+Vanlig `/account/login` er uendret; manglende MyShare-grant sperrer ikke grunnleggende
+innlogging. Eksisterende innlogginger har ikke API-token og må kobles til én gang.
+Etter tilkobling kontrollerer `/myshare-access` den faktiske klubblisten og viser
+klubbnavn/antall personer, eller en avgrenset feil uten token eller API-svarinnhold.
+
+Access-/refresh-token lagres med ASP.NET Data Protection i `MyshareUserSessions`
+i den eksisterende SQLite-databasen. Cookie inneholder kun en tilfeldig sesjons-ID;
+ID-token, access-token og refresh-token fjernes fra innloggingsegenskapene før
+cookie utstedes. Sesjonen er bundet til både BCC person-ID og `sub`, og kan ikke
+brukes av andre brukere eller API-nøkkel-kall. Den varer høyst syv dager.
+Tilgangstoken fornyes under serverlås når det er under ett minutt til utløp;
+roterte refresh-token lagres før neste forespørsel. Ved varig refresh-avvisning
+slettes sesjonen. Utlogging sletter den lokale tokensesjonen. Fornyelseslåsene
+forutsetter én aktiv webinstans, slik dagens Coolify-oppsett bruker.
+
+Databasen og `/app/data/keys` må bestå mellom utrullinger. Tokens skal aldri
+kopieres til logger, chat, miljøvariabler eller nettleserlagring. MyShare-kall fra
+nettleserøkten bruker alltid den innloggede brukerens token, selv om en statisk
+`MYSHARE_BEARER` er satt. Transaksjons-/ekstrabidrags-cache er adskilt per request/
+Blazor-økt. Maskinklienter og ubetjent Telegram-innhenting låner aldri en brukerøkt;
+den eksisterende manuelle maskintilkoblingen krever fortsatt eget oppsett.

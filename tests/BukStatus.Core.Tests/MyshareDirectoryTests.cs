@@ -42,6 +42,22 @@ public class MyshareDirectoryTests
         var directory = new MyshareDirectory(http, Options.Create(new MyshareOptions { BaseUrl = "https://example.test/api/", Bearer = "dummy" }));
         await Assert.ThrowsAsync<MyshareDirectoryException>(() => directory.GetClubsAsync(21410));
     }
+    [Fact]
+    public async Task Uses_session_access_token_without_requiring_a_configured_static_bearer()
+    {
+        using var http = new HttpClient(new Handler(request =>
+        {
+            Assert.Equal("synthetic-session-token",request.Headers.Authorization!.Parameter);
+            return "{\"statusCode\":200,\"data\":[]}";
+        }));
+        var directory = new MyshareDirectory(http,Options.Create(new MyshareOptions { BaseUrl="https://synthetic.example/api",Bearer="must-not-be-used" }),new Tokens());
+        Assert.Empty(await directory.GetClubsAsync(21410));
+    }
+    private sealed class Tokens : IMyshareTokenProvider
+    {
+        public bool CanUse => true;
+        public Task<string> GetAsync(CancellationToken ct=default)=>Task.FromResult("synthetic-session-token");
+    }
     private sealed class Handler(Func<HttpRequestMessage, string> body, HttpStatusCode code = HttpStatusCode.OK) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>

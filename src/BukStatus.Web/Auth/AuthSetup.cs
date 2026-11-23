@@ -63,6 +63,7 @@ public static class AuthSetup
                 oidc.ClientId = options.ClientId;
                 oidc.ClientSecret = options.ClientSecret;
                 oidc.ResponseType = "code";
+                oidc.SaveTokens = true;
                 oidc.CallbackPath = "/signin-auth0";
                 oidc.Scope.Clear();
                 oidc.Scope.Add("openid");
@@ -75,6 +76,36 @@ public static class AuthSetup
                 oidc.GetClaimsFromUserInfoEndpoint = true;
                 oidc.ClaimActions.MapUniqueJsonKey(BukClaims.PersonId, BukClaims.PersonId);
                 oidc.TokenValidationParameters.NameClaimType = "name";
+                oidc.Events.OnRedirectToIdentityProvider = context =>
+                {
+                    if (context.Properties.Items.TryGetValue("buk:myshare", out var connect) && connect == "true")
+                    {
+                        context.ProtocolMessage.SetParameter("audience", options.MyshareAudience);
+                        context.ProtocolMessage.Scope = "openid profile email offline_access mfa";
+                    }
+                    return Task.CompletedTask;
+                };
+                oidc.Events.OnTicketReceived = async context =>
+                {
+                    try
+                    {
+                        if (context.Properties!.Items.TryGetValue("buk:myshare", out var connect) && connect == "true")
+                            await context.HttpContext.RequestServices.GetRequiredService<MyshareTokenStore>().CaptureAsync(context.Principal!, context.Properties, context.HttpContext.RequestAborted);
+                    }
+                    catch (BukStatus.Core.Clubs.MyshareDirectoryException)
+                    {
+                        context.HandleResponse(); context.Response.Redirect("/myshare-access?failed=true");
+                    }
+                    finally { context.Properties!.StoreTokens([]); }
+                };
+                oidc.Events.OnRemoteFailure = context =>
+                {
+                    if (context.Properties?.Items.TryGetValue("buk:myshare", out var connect) == true && connect == "true")
+                    {
+                        context.HandleResponse(); context.Response.Redirect("/myshare-access?failed=true");
+                    }
+                    return Task.CompletedTask;
+                };
             });
 
         builder.Services.AddSingleton<IAuthorizationHandler, AllowedPersonHandler>();
@@ -95,6 +126,13 @@ public static class AuthSetup
                 [OpenIdConnectDefaults.AuthenticationScheme]))
             .AllowAnonymous();
 
+        app.MapGet("/account/myshare/connect", (string? returnUrl) =>
+        {
+            var properties = new AuthenticationProperties { RedirectUri = LocalUrlOrRoot(returnUrl ?? "/myshare-access") };
+            properties.Items["buk:myshare"] = "true";
+            return Results.Challenge(properties, [OpenIdConnectDefaults.AuthenticationScheme]);
+        }).RequireAuthorization(Policy);
+
         app.MapPost("/account/request-access", async (HttpContext context, IAntiforgery antiforgery,
             BukStatus.Core.Administration.AccessRequestService requests) =>
         {
@@ -111,6 +149,7 @@ public static class AuthSetup
             if (!await antiforgery.IsRequestValidAsync(context))
                 return Results.BadRequest();
 
+            await context.RequestServices.GetRequiredService<MyshareTokenStore>().RevokeAsync(context.User, context.RequestAborted);
             await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             if (!options.Value.OidcConfigured)
                 return Results.LocalRedirect("/");

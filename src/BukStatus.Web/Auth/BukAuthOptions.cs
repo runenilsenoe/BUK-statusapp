@@ -8,6 +8,8 @@ public class BukAuthOptions
 {
     public const string SectionName = "Auth";
 
+    public string MyshareAudience { get; set; } = "https://myshare.today/api/";
+
     public string Authority { get; set; } = "https://login.bcc.no";
     public string ClientId { get; set; } = "";
     public string ClientSecret { get; set; } = "";
@@ -24,6 +26,8 @@ public class BukAuthOptions
 public static class BukClaims
 {
     /// <summary>Person id claim in BCC's id_token.</summary>
+    public const string MyshareSession = "buk:myshare-session";
+
     public const string PersonId = "https://login.bcc.no/claims/personId";
 
     /// <summary>Set on the local development user and on API key callers, which skip the person allowlist.</summary>

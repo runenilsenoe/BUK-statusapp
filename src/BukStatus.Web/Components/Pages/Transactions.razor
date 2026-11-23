@@ -46,6 +46,7 @@
     {
         busy = true; error = null; result = null; page = 1;
         try { result = await Service.GetAsync(DateOnly.FromDateTime(from), DateOnly.FromDateTime(to)); }
+        catch (BukStatus.Core.Clubs.MyshareDirectoryException ex) { error = ex.Message; }
         catch (GroupException ex) { error = ex.Message; }
         catch (UnauthorizedAccessException) { error = "Du har ikke tilgang til valgt klubb."; }
         catch { error = "Transaksjonene kunne ikke hentes. Prøv igjen senere."; }

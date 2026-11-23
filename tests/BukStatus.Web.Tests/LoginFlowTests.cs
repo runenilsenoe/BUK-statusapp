@@ -274,6 +274,19 @@ public sealed class LoginFlowTests : IDisposable
         });
     }
 
+    [Fact]
+    public async Task Connecting_myshare_requests_verified_audience_and_refresh_scope_without_changing_basic_login()
+    {
+        Assert.Equal(HttpStatusCode.Redirect,(await Send(HttpMethod.Get,"/account/myshare/connect")).StatusCode);
+        var response=await Send(HttpMethod.Get,"/account/myshare/connect?returnUrl=https://other.example",LoginCookie(AllowedPersonId));
+        var location=System.Net.WebUtility.UrlDecode(response.Headers.Location!.ToString());
+        Assert.Contains("audience=https://myshare.today/api/",location);
+        Assert.Contains("offline_access",location); Assert.Contains("mfa",location);
+        Assert.Contains("code_challenge_method=S256",location); Assert.Equal("/",_lastReturnUrl);
+        var basic=await Send(HttpMethod.Get,"/account/login");
+        Assert.DoesNotContain("audience=",basic.Headers.Location!.ToString());
+    }
+
     [Theory]
     [InlineData("//evil.example")]
     [InlineData("https://evil.example")]

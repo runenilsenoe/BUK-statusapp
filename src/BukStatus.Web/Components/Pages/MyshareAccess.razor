@@ -1,0 +1,29 @@
+@page "/myshare-access"
+@using BukStatus.Core.Clubs
+@inject BukStatus.Core.People.IPersonDirectory Directory
+<PageTitle>MyShare-tilgang · BUK Status</PageTitle>
+<h1>MyShare-tilgang</h1>
+@if (error is not null) { <p class="alert" role="alert">@error</p> }
+@if (scope is not null)
+{
+    <p role="status">MyShare-tilgangen er verifisert for <strong>@scope.Club.Name</strong> (@scope.Club.Members.Count personer).</p>
+    <p><a href="people">Åpne personoversikten</a> · <a href="pot">Åpne pott</a></p>
+}
+<p>Tilkoblingen bruker din egen BCC-konto. Tilgangstoken og fornyelsestoken lagres kryptert på serveren for denne brukerøkten og fjernes ved utlogging.</p>
+<a class="button" href="account/myshare/connect" data-enhance-nav="false">Koble til MyShare</a>
+@code {
+    [SupplyParameterFromQuery] public bool Failed { get; set; }
+    string? error;
+    ClubScope? scope;
+    protected override async Task OnInitializedAsync()
+    {
+        if (Failed)
+        {
+            error = "BCC kunne ikke fullføre MyShare-tilkoblingen. Både kontoen din og appens OAuth-klient må ha tilgang til MyShare-API-et (https://myshare.today/api/). Vanlig BCC-innlogging til appen fungerer fortsatt.";
+            return;
+        }
+        try { scope = await Directory.GetAsync(); }
+        catch (Exception ex) when (ex is MyshareDirectoryException or GroupException) { error = ex.Message; }
+        catch { error = "MyShare-tilgangen kunne ikke kontrolleres. Prøv å koble til på nytt."; }
+    }
+}

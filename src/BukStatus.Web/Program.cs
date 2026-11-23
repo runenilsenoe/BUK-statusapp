@@ -30,6 +30,10 @@ builder.Services.AddSingleton<BukStatus.Core.Administration.AccessRequestService
 builder.Services.Configure<BukStatus.Web.Notifications.SmtpOptions>(builder.Configuration.GetSection("Smtp"));
 builder.Services.AddSingleton<BukStatus.Web.Notifications.IAccessRequestMail, BukStatus.Web.Notifications.SmtpAccessRequestMail>();
 builder.Services.AddHostedService<BukStatus.Web.Notifications.AccessRequestNotifier>();
+builder.Services.AddSingleton<MyshareTokenStore>();
+builder.Services.AddScoped<IMyshareTokenProvider, UserMyshareTokenProvider>();
+builder.Services.AddHttpClient("MyshareTokenRefresh", c => c.Timeout = TimeSpan.FromSeconds(30))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped<IClubContext, ClubContext>();
 builder.Services.AddScoped<BukStatus.Core.People.IPersonDirectory, PersonDirectory>();
 builder.Services.AddScoped<BukStatus.Core.Pot.IPotRoster, PotRoster>();

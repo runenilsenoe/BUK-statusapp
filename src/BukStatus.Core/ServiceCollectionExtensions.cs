@@ -44,8 +44,8 @@ public static class ServiceCollectionExtensions
         services.AddOptions<MyshareOptions>().Bind(configuration.GetSection(MyshareOptions.SectionName));
         services.AddHttpClient(MyshareExtraContributionsSource.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(30))
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-        services.AddSingleton<IExtraContributionsSource, MyshareExtraContributionsSource>();
-        services.AddSingleton<ExtraContributionsService>();
+        services.AddScoped<IExtraContributionsSource, MyshareExtraContributionsSource>();
+        services.AddScoped<ExtraContributionsService>();
 
         var connectionString = configuration.GetConnectionString("BukStatus") ?? "Data Source=bukstatus.db";
         services.AddDbContextFactory<BukStatusDbContext>(options => options.UseSqlite(connectionString));

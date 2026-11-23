@@ -1,4 +1,5 @@
 using System.Globalization;
+using BukStatus.Core.Clubs;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using BccCode.Contributions.Api.Client;
@@ -58,6 +59,7 @@ public class ExtraContributionsService(
 {
     public static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(1);
 
+    private readonly Guid cachePartition = Guid.NewGuid();
     private readonly List<IExtraContributionsSource> _sources = sources.ToList();
 
     /// <summary>The sources in the order they're tried, and whether each can handle the query.</summary>
@@ -71,7 +73,7 @@ public class ExtraContributionsService(
             return Manual(settings, null);
 
         var query = settings.ToQuery(memberIds, today) with { ClubId = clubId, TeamId = teamId };
-        var key = CacheKey(query);
+        var key = $"{cachePartition}:{CacheKey(query)}";
         if (cache.TryGetValue(key, out ExtraContributionsResult? cached) && cached is not null)
             return cached;
 
@@ -170,7 +172,7 @@ public class MyshareOptions
 }
 
 /// <summary>Club transactions from the myshare admin API (ClubTransactions), the old PACEFEST source.</summary>
-public class MyshareExtraContributionsSource(IHttpClientFactory httpClientFactory, IOptions<MyshareOptions> options) : IExtraContributionsSource
+public class MyshareExtraContributionsSource(IHttpClientFactory httpClientFactory, IOptions<MyshareOptions> options, IMyshareTokenProvider? tokens = null) : IExtraContributionsSource
 {
     public const string HttpClientName = "myshare";
 
@@ -178,7 +180,7 @@ public class MyshareExtraContributionsSource(IHttpClientFactory httpClientFactor
 
     public string Name => "myshare";
 
-    public bool CanHandle(ExtraContributionsQuery query) => !string.IsNullOrWhiteSpace(_options.Bearer)
+    public bool CanHandle(ExtraContributionsQuery query) => (tokens?.CanUse == true || !string.IsNullOrWhiteSpace(_options.Bearer))
         && Uri.IsWellFormedUriString(_options.BaseUrl, UriKind.Absolute) && (query.ClubId ?? _options.ClubId) > 0;
 
     public async Task<IReadOnlyList<ExtraContribution>> GetAsync(ExtraContributionsQuery query, CancellationToken cancellationToken)
@@ -187,7 +189,8 @@ public class MyshareExtraContributionsSource(IHttpClientFactory httpClientFactor
                   + $"&fromDate={QueryDate(query.From.ToDateTime(TimeOnly.MinValue))}"
                   + $"&toDate={QueryDate(query.To.ToDateTime(new TimeOnly(23, 59, 59)))}";
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.Bearer);
+        var bearer = tokens is not null ? await tokens.GetAsync(cancellationToken) : _options.Bearer;
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
         if (query.TeamId is { } teamId) request.Headers.Add("TeamId", teamId.ToString(CultureInfo.InvariantCulture));
         using var response = await httpClientFactory.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();

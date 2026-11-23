@@ -24,26 +24,27 @@ public interface IMyshareDirectory
 }
 
 /// <summary>Access is derived from Teams(userId), never from the clubs' member lists.</summary>
-public sealed class MyshareDirectory(HttpClient client, IOptions<MyshareOptions> options) : IMyshareDirectory
+public sealed class MyshareDirectory(HttpClient client, IOptions<MyshareOptions> options, IMyshareTokenProvider? tokens = null) : IMyshareDirectory
 {
     public async Task<IReadOnlyList<MyshareClub>> GetClubsAsync(int personId, CancellationToken ct = default)
     {
         if (personId <= 0) throw new UnauthorizedAccessException();
         var settings = options.Value;
         if (!Uri.TryCreate(settings.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute, out var root)
-            || root.Scheme != "https" || root.UserInfo.Length > 0 || root.Query.Length > 0 || root.Fragment.Length > 0
-            || string.IsNullOrWhiteSpace(settings.Bearer))
+            || root.Scheme != "https" || root.UserInfo.Length > 0 || root.Query.Length > 0 || root.Fragment.Length > 0)
             throw new MyshareDirectoryException("MyShare-tilgang er ikke konfigurert. En administrator må sette opp tilgangen.");
+        var bearer = tokens is not null ? await tokens.GetAsync(ct) : settings.Bearer;
+        if (string.IsNullOrWhiteSpace(bearer)) throw new MyshareDirectoryException("MyShare-tilgang er ikke konfigurert.");
         async Task<JsonElement[]> Get(string path, int? teamId = null)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(root, path));
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.Bearer);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
             if (teamId.HasValue) request.Headers.Add("TeamId", teamId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
             using var response = await client.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode) throw new MyshareDirectoryException(response.StatusCode switch
             {
-                System.Net.HttpStatusCode.Unauthorized => "MyShare avviser innloggingen (HTTP 401). En administrator må kontrollere eller fornye MyShare-tokenet.",
-                System.Net.HttpStatusCode.Forbidden => "MyShare nekter tilgang (HTTP 403). En administrator må kontrollere API-rettighetene.",
+                System.Net.HttpStatusCode.Unauthorized => "MyShare avviser innloggingen (HTTP 401). Koble til MyShare på nytt via appen.",
+                System.Net.HttpStatusCode.Forbidden => "MyShare nekter tilgang (HTTP 403). Kontroller kontoens og appens API-rettigheter.",
                 _ => $"MyShare svarte med HTTP {(int)response.StatusCode}. Prøv igjen senere."
             });
             using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
