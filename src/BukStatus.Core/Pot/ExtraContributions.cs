@@ -19,7 +19,7 @@ public enum ExtraContributionsMode
 }
 
 /// <summary>One contribution that may count towards the pot.</summary>
-public record ExtraContribution(int PersonId, DateOnly Date, decimal Amount, string? Description);
+public record ExtraContribution(int PersonId, DateOnly Date, decimal Amount, string? Description, string? PersonName = null, int? Id = null, decimal? Hours = null);
 
 /// <param name="OrgId">BCC org id whose contributions to read (BCC API).</param>
 /// <param name="DescriptionFilter">Only contributions whose description contains this count. Null counts all.</param>
@@ -30,7 +30,7 @@ public record ExtraContributionsQuery(
     string? DescriptionFilter,
     DateOnly From,
     DateOnly To,
-    IReadOnlySet<int> ExcludedPersonIds, int? ClubId = null, int? TeamId = null);
+    IReadOnlySet<int> ExcludedPersonIds, int? ClubId = null, int? TeamId = null, bool IncludeUnassigned = false);
 
 /// <param name="Source">Human-readable source, shown on the page.</param>
 /// <param name="Warning">Set when a source failed and a backup was used.</param>
@@ -147,6 +147,7 @@ public class BccExtraContributionsSource(IContributionsApiClient client) : IExtr
             result.AddRange(data.Select(c => new ExtraContribution(c.PersonID, Dates.ToNorwegianDate(c.ContributionDate), c.Amount, c.Description)));
             if (data.Count < PageSize)
                 break;
+            if (page == MaxPages - 1) throw new InvalidOperationException("For mange transaksjoner. Velg en kortere periode.");
         }
         return result;
     }
@@ -197,8 +198,8 @@ public class MyshareExtraContributionsSource(IHttpClientFactory httpClientFactor
             throw new InvalidOperationException($"myshare svarte med status {body.StatusCode}.");
 
         return (body.Data ?? [])
-            .Where(t => t.UserId is not null && t.Amount is not null && t.TransactionDate is not null)
-            .Select(t => new ExtraContribution(t.UserId!.Value, DateOnly.FromDateTime(t.TransactionDate!.Value), t.Amount!.Value, t.Description))
+            .Where(t => (t.UserId is not null || query.IncludeUnassigned) && t.Amount is not null && t.TransactionDate is not null)
+            .Select(t => new ExtraContribution(t.UserId ?? 0, DateOnly.FromDateTime(t.TransactionDate!.Value), t.Amount!.Value, t.Description, t.UserDisplayName, t.Id, t.Hours))
             .ToList();
     }
 
@@ -213,6 +214,9 @@ public class MyshareExtraContributionsSource(IHttpClientFactory httpClientFactor
 
     private sealed class MyshareTransaction
     {
+        public int? Id { get; set; }
+        public string? UserDisplayName { get; set; }
+        public decimal? Hours { get; set; }
         public string? Description { get; set; }
         public DateTime? TransactionDate { get; set; }
         public int? UserId { get; set; }

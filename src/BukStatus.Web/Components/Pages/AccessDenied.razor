@@ -10,7 +10,12 @@
 @if (personId is not null)
 {
     <p>Du er logget inn som <strong>@name</strong> (person-ID @personId), men har ikke tilgang til BUK Status.</p>
-    <p class="muted">Be en administrator legge til person-ID-en din i Auth:AllowedPersonIds.</p>
+    @if (Requested) { <p role="status">Tilgangsforespørselen er registrert. En administrator må godkjenne den før du får tilgang. Du kan prøve igjen etter godkjenning.</p><a href="/">Prøv tilgang igjen</a> }
+    else
+    {
+        <p>Be om tilgang for å sende en forespørsel til administratoren.</p>
+        <form method="post" action="account/request-access"><AntiforgeryToken /><button type="submit">Be om tilgang</button></form>
+    }
 }
 else if (signedIn)
 {
@@ -30,6 +35,7 @@ else
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
+    [SupplyParameterFromQuery(Name = "requested")] public bool Requested { get; set; }
     private int? personId;
     private string? name;
     private bool signedIn;

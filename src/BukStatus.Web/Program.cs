@@ -26,7 +26,12 @@ builder.Services.AddScoped<BukStatus.Web.Diagnostics.BccDiagnostics>();
 builder.Services.AddHttpClient("BccDiagnostics", c => c.Timeout = TimeSpan.FromSeconds(15))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped<BukStatus.Core.Administration.IWriteAccess>(sp => sp.GetRequiredService<AdministratorAccess>());
+builder.Services.AddSingleton<BukStatus.Core.Administration.AccessRequestService>();
+builder.Services.Configure<BukStatus.Web.Notifications.SmtpOptions>(builder.Configuration.GetSection("Smtp"));
+builder.Services.AddSingleton<BukStatus.Web.Notifications.IAccessRequestMail, BukStatus.Web.Notifications.SmtpAccessRequestMail>();
+builder.Services.AddHostedService<BukStatus.Web.Notifications.AccessRequestNotifier>();
 builder.Services.AddScoped<IClubContext, ClubContext>();
+builder.Services.AddScoped<BukStatus.Core.People.IPersonDirectory, PersonDirectory>();
 builder.Services.AddHttpClient<IMyshareDirectory, MyshareDirectory>(c => c.Timeout = TimeSpan.FromSeconds(30))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddRazorComponents()

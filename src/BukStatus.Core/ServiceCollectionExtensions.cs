@@ -54,6 +54,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TeamService>();
         services.AddScoped<TeamReportService>();
         services.AddScoped<PotService>();
+        services.AddScoped<BukStatus.Core.People.PersonService>();
+        services.AddScoped<BukStatus.Core.Transactions.TransactionService>();
 
         return services;
     }

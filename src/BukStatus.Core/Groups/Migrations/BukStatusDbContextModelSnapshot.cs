@@ -17,6 +17,51 @@ namespace BukStatus.Core.Groups.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.10");
 
+            modelBuilder.Entity("BukStatus.Core.Administration.AccessNotificationSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Recipient")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AccessNotificationSettings");
+                });
+
+            modelBuilder.Entity("BukStatus.Core.Administration.AccessRequest", b =>
+                {
+                    b.Property<int>("PersonId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Approved")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("DeliveryError")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("NextAttemptUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("NotifiedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("PersonId");
+
+                    b.ToTable("AccessRequests");
+                });
+
             modelBuilder.Entity("BukStatus.Core.Administration.Administrator", b =>
                 {
                     b.Property<int>("PersonId")
@@ -81,6 +126,30 @@ namespace BukStatus.Core.Groups.Migrations
                         .IsUnique();
 
                     b.ToTable("GroupMembers");
+                });
+
+            modelBuilder.Entity("BukStatus.Core.People.PersonFollowUp", b =>
+                {
+                    b.Property<int>("ClubId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("PersonId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(5000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Preference")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ClubId", "PersonId");
+
+                    b.ToTable("PersonFollowUps");
                 });
 
             modelBuilder.Entity("BukStatus.Core.Pot.PotSettings", b =>

@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 namespace BukStatus.Web.Auth;
 
 public sealed class AdministratorAccess(IHttpContextAccessor http, AuthenticationStateProvider authentication,
-    AdministratorStore store, IOptions<ClubAccessOptions> clubs, IOptions<BukAuthOptions> auth) : IWriteAccess
+    AdministratorStore store, AccessRequestService requests, IOptions<ClubAccessOptions> clubs, IOptions<BukAuthOptions> auth) : IWriteAccess
 {
     private async Task<ClaimsPrincipal> UserAsync()
     {
@@ -36,6 +36,10 @@ public sealed class AdministratorAccess(IHttpContextAccessor http, Authenticatio
         return AdministratorStore.SuperAdminPersonId;
     }
     public async Task RequireSuperAdminAsync() => _ = await SuperAdminAsync();
+    public async Task<List<AccessRequest>> GetPendingAsync() => await requests.GetPendingAsync(await SuperAdminAsync());
+    public async Task<string> GetRecipientAsync() => await requests.GetRecipientAsync(await SuperAdminAsync());
+    public async Task SaveRecipientAsync(string recipient) => await requests.SaveRecipientAsync(await SuperAdminAsync(), recipient);
+    public async Task ApproveAsync(int personId) => await requests.ApproveAsync(await SuperAdminAsync(), personId);
     public async Task<List<Administrator>> GetAllAsync() => await store.GetAllAsync(await SuperAdminAsync());
     public async Task AddAsync(int personId, string? name) => await store.AddAsync(await SuperAdminAsync(), personId, name);
     public async Task RemoveAsync(int personId) => await store.RemoveAsync(await SuperAdminAsync(), personId);

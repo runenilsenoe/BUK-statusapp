@@ -95,6 +95,16 @@ public static class AuthSetup
                 [OpenIdConnectDefaults.AuthenticationScheme]))
             .AllowAnonymous();
 
+        app.MapPost("/account/request-access", async (HttpContext context, IAntiforgery antiforgery,
+            BukStatus.Core.Administration.AccessRequestService requests) =>
+        {
+            if (context.User.Identity?.IsAuthenticated != true || context.User.Identity.AuthenticationType == ApiKeyAuthenticationHandler.SchemeName
+                || context.User.PersonId() is not > 0) return Results.Unauthorized();
+            if (!await antiforgery.IsRequestValidAsync(context)) return Results.BadRequest();
+            await requests.RequestAsync(context.User.PersonId()!.Value, context.User.Identity.Name, context.RequestAborted);
+            return Results.LocalRedirect("/access-denied?requested=true");
+        }).AllowAnonymous();
+
         app.MapPost("/account/logout", async (HttpContext context, IAntiforgery antiforgery, IOptions<BukAuthOptions> options) =>
         {
             // The logout forms send an antiforgery token; without this check, another site could log people out.
@@ -135,17 +145,11 @@ public static class AuthSetup
 public class AllowedPersonRequirement : IAuthorizationRequirement;
 
 /// <summary>Lets in API key callers, the local developer, and logged-in people on Auth:AllowedPersonIds.</summary>
-public class AllowedPersonHandler(IOptionsMonitor<BukAuthOptions> options, IOptions<ClubAccessOptions> clubs, BukStatus.Core.Administration.AdministratorStore administrators) : AuthorizationHandler<AllowedPersonRequirement>
+public class AllowedPersonHandler(IOptionsMonitor<BukAuthOptions> options, BukStatus.Core.Administration.AdministratorStore administrators) : AuthorizationHandler<AllowedPersonRequirement>
 {
     protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, AllowedPersonRequirement requirement)
     {
         var user = context.User;
-        if (clubs.Value.Enabled)
-        {
-            if (user.PersonId() is > 0 || (user.Identity?.AuthenticationType == ApiKeyAuthenticationHandler.SchemeName && clubs.Value.ApiPersonId > 0))
-                context.Succeed(requirement);
-            return;
-        }
         if (user.HasClaim(c => c.Type == BukClaims.Trusted)
             || user.PersonId() is { } personId && (options.CurrentValue.AllowedPersonIds.Contains(personId) || await administrators.IsAdministratorAsync(personId)))
             context.Succeed(requirement);

@@ -197,3 +197,34 @@ ikke i denne eksporten. UI-et merker beløpene som terskler (≥), ikke eksakte 
 0 coins betyr ikke bekreftet 0 NOK: betalingen kan være under terskelen. Manglende
 månedsdata holdes adskilt fra 0 coins. Personer med ugyldig/manglende Drive-flagg telles
 separat og vises i eksportdetaljene.
+
+## Personer, transaksjoner og tilgangsforespørsler
+
+- `/transactions` viser alle transaksjoner for valgt klubb og periode, uten pottens
+  beskrivelses-/personfiltre. Søk støtter navn, beskrivelse, ID, dato og beløp;
+  summen gjelder alle treff, også de som ligger på neste side. Data mellomlagres
+  i ti minutter. MyShare brukes i klubbmodus; uten klubbmodus kan konfigurert
+  BCC org-ID fra pottinnstillingene brukes. Manglende kilde gir feil, aldri tomme
+  testdata. Kilde `testdata` er kun aktiv når `BccApi:UseFakeData=true`.
+- `/people` henter hele MyShare-klubbregisteret uavhengig av lokale lag.
+  Notat (maks. 5000 tegn) og ett frivillig arbeids-/sparevalg lagres i
+  `PersonFollowUps`, adskilt per klubb og person. Bare administratorer kan lese
+  og endre disse feltene. Sletting fra et lag påvirker ikke oppfølgingen.
+- BCC-innlogging gir ikke automatisk apptilgang, heller ikke i klubbmodus.
+  Fast superadministrator, administratorregister og eksisterende legacy
+  `Auth:AllowedPersonIds` gir apptilgang. MyShare-klubbtilgang sjekkes i tillegg.
+- `/access-denied` lar en innlogget BCC-bruker med person-ID be om tilgang.
+  POST krever antiforgery. Navn og ID leses fra innloggingen, aldri fra skjemaet.
+  Gjentatte klikk oppretter ikke nye varsler. Superadministratoren ser køen på
+  `/administrators`; «Legg til ny admin» godkjenner forespørselen og legger til
+  administratoren atomisk. Godkjenning gir ingen ekstra MyShare-klubbtilganger.
+- Mottakeradressen for varsler lagres fra adminpanelet. SMTP-hemmeligheter legges
+  kun i Coolify: `SMTP_USER` og `SMTP_FROM` er Gmail-adressen;
+  `SMTP_PASSWORD` er et Google-apppassord. Standard `SMTP_HOST=smtp.gmail.com`,
+  `SMTP_PORT=587`, STARTTLS er påkrevd. Apppassord krever at Google-kontoen har
+  støtte for apppassord og totrinnsbekreftelse. Ikke bruk vanlig Google-passord.
+- E-postkøen sjekkes hvert minutt og prøver igjen etter fem minutter ved feil.
+  Uten SMTP/mottaker beholdes forespørslene i adminpanelet og varsler venter.
+  Vellykket sending markeres; et krasj akkurat etter sending kan gi et duplikat
+  ved omstart (minst én levering). E-post inneholder navn, BCC-ID og en fast lenke
+  til adminpanelet, aldri personnotater eller økonomiske data.

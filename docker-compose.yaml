@@ -31,6 +31,13 @@ services:
       # Key for the Telegram bot / scripts calling /api (header X-Api-Key). Generate with: openssl rand -hex 32
       Auth__ApiKeys__0: ${API_KEY_BOT:-}
 
+      # Gmail SMTP: use a Google app password, not the normal account password.
+      Smtp__Host: ${SMTP_HOST:-smtp.gmail.com}
+      Smtp__Port: ${SMTP_PORT:-587}
+      Smtp__User: ${SMTP_USER:-}
+      Smtp__Password: ${SMTP_PASSWORD:-}
+      Smtp__From: ${SMTP_FROM:-}
+
       # Optional backup for the pot screen's extra contributions when the BCC API doesn't answer (old PACEFEST source).
       # Enable after the MyShare bearer is configured and tested. Existing data belongs to BUK Sørlandet.
       ClubAccess__Enabled: ${MYSHARE_CLUB_ACCESS_ENABLED:-false}

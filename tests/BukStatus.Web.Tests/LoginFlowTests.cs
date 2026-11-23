@@ -188,11 +188,59 @@ public sealed class LoginFlowTests : IDisposable
     }
 
     [Fact]
+    public async Task Transaction_page_renders_search_period_and_totals()
+    {
+        var response = await Send(HttpMethod.Get, "/transactions", LoginCookie(AllowedPersonId));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = System.Net.WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+        Assert.Contains("Sum for søket", html);
+        Assert.Contains("Transaksjons-ID", html);
+        Assert.Contains("syntetiske testdata", html);
+    }
+
+    [Fact]
     public async Task Access_denied_shows_the_person_id_to_pass_on()
     {
         var html = await (await Send(HttpMethod.Get, "/access-denied", LoginCookie("55555"))).Content.ReadAsStringAsync();
 
         Assert.Contains("55555", html);
+    }
+
+    [Fact]
+    public async Task Club_mode_also_requires_approval_before_opening_app_or_person_notes()
+    {
+        using var app = _app.WithWebHostBuilder(host => host.UseSetting("ClubAccess:Enabled", "true"));
+        using var client = app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        foreach (var path in new[] { "/", "/transactions", "/people", "/administrators" })
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, path);
+            request.Headers.Add("Cookie", LoginCookie("55555"));
+            var response = await client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+            Assert.Contains("/access-denied", response.Headers.Location!.ToString());
+        }
+    }
+
+    [Fact]
+    public async Task Access_request_requires_cookie_identity_and_antiforgery_and_enables_login_after_approval()
+    {
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Post, "/account/request-access")).StatusCode);
+        var cookie = LoginCookie("55555", "Synthetic Applicant");
+        Assert.Equal(HttpStatusCode.BadRequest, (await Send(HttpMethod.Post, "/account/request-access", cookie)).StatusCode);
+        var page = await Send(HttpMethod.Get, "/access-denied", cookie);
+        var html = await page.Content.ReadAsStringAsync();
+        var token = System.Net.WebUtility.HtmlDecode(System.Text.RegularExpressions.Regex.Match(html, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"").Groups[1].Value);
+        Assert.NotEmpty(token);
+        var anti = page.Headers.GetValues("Set-Cookie").Select(c => c.Split(';')[0]).Single(c => c.StartsWith(".AspNetCore.Antiforgery"));
+        var response = await Send(HttpMethod.Post, "/account/request-access", $"{cookie}; {anti}", new FormUrlEncodedContent(new Dictionary<string,string> { ["__RequestVerificationToken"] = token, ["personId"] = "99999", ["name"] = "Forged" }));
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var requests = _app.Services.GetRequiredService<BukStatus.Core.Administration.AccessRequestService>();
+        var pending = Assert.Single(await requests.GetPendingAsync(21410));
+        Assert.Equal(55555, pending.PersonId); Assert.Equal("Synthetic Applicant", pending.DisplayName);
+        var panel = System.Net.WebUtility.HtmlDecode(await (await Send(HttpMethod.Get, "/administrators", LoginCookie("21410"))).Content.ReadAsStringAsync());
+        Assert.Contains("Legg til ny admin", panel); Assert.Contains("Synthetic Applicant", panel);
+        await requests.ApproveAsync(21410, 55555);
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Get, "/", cookie)).StatusCode);
     }
 
     [Fact]

@@ -2,15 +2,34 @@
 @rendermode InteractiveServer
 @using BukStatus.Core.Administration
 @inject BukStatus.Web.Auth.AdministratorAccess Access
+@inject Microsoft.Extensions.Options.IOptions<BukStatus.Web.Notifications.SmtpOptions> Smtp
 
 <PageTitle>Administratorer · BUK Status</PageTitle>
 <h1>Administratorer</h1>
+@if (saved is not null) { <p role="status">@saved</p> }
 @if (error is not null)
 {
     <p class="alert">@error</p>
 }
 @if (administrators is not null)
 {
+    @if (pending.Count > 0)
+    {
+        <section class="alert" aria-label="Tilgangsforespørsler"><h2>Tilgangsforespørsler (@pending.Count)</h2>
+        @foreach (var request in pending)
+        {
+            <p><strong>@request.DisplayName</strong> · @request.PersonId · @request.RequestedAtUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+            <button type="button" disabled="@busy" @onclick="() => Run(() => Access.ApproveAsync(request.PersonId))">Legg til ny admin</button><br />
+            <small>@(request.NotifiedAtUtc is not null ? "E-postvarsel sendt" : request.DeliveryError ?? "E-postvarsel venter på utsending/oppsett")</small></p>
+        }</section>
+    }
+    <button type="button" disabled="@busy" @onclick="() => Run(() => Task.CompletedTask)">Oppdater forespørsler</button>
+    <h2>E-postvarsler</h2>
+    <form @onsubmit="() => Run(() => Access.SaveRecipientAsync(recipient))" @onsubmit:preventDefault>
+        <label>Mottaker <input type="email" @bind="recipient" maxlength="254" required disabled="@busy" /></label>
+        <button disabled="@busy" type="submit">Lagre mottaker</button>
+    </form>
+    @if (!Smtp.Value.Configured) { <p class="alert">Gmail SMTP er ikke ferdig konfigurert. Forespørsler lagres og vises her; e-post sendes når SMTP og mottaker er satt opp.</p> }
     <p>Person-ID <strong>21410</strong> er fast superadministrator og kan ikke fjernes.</p>
     <p>Administratorer kan endre lag, grupper og innstillinger i klubbene de har tilgang til i MyShare.</p>
     <form class="inline-form" @onsubmit="Add">
@@ -38,13 +57,15 @@
 }
 @code {
     private List<Administrator>? administrators;
+    private List<AccessRequest> pending = [];
+    private string recipient = "";
     private int? personId;
     private string? name;
-    private string? error;
+    private string? error, saved;
     private bool busy;
     protected override async Task OnInitializedAsync()
     {
-        try { administrators = await Access.GetAllAsync(); }
+        try { administrators = await Access.GetAllAsync(); pending = await Access.GetPendingAsync(); recipient = await Access.GetRecipientAsync(); }
         catch (UnauthorizedAccessException) { error = "Kun superadministratoren har tilgang til denne siden."; }
     }
     private Task Add() => Run(async () =>
@@ -58,8 +79,8 @@
     private async Task Run(Func<Task> action)
     {
         busy = true;
-        error = null;
-        try { await action(); administrators = await Access.GetAllAsync(); }
+        error = null; saved = null;
+        try { await action(); administrators = await Access.GetAllAsync(); pending = await Access.GetPendingAsync(); recipient = await Access.GetRecipientAsync(); saved = "Oppdatert."; }
         catch (UnauthorizedAccessException) { administrators = null; error = "Kun superadministratoren kan endre administratorer."; }
         catch (GroupException ex) { error = ex.Message; }
         finally { busy = false; }

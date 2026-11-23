@@ -92,6 +92,19 @@ public sealed class ClubAccessTests : IDisposable
         Assert.DoesNotContain("BCC member", html);
     }
 
+    [Fact]
+    public async Task People_page_uses_full_club_roster_without_local_teams()
+    {
+        using var app = App();
+        using var client = Client(app, 4050);
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync("/people"));
+        Assert.Contains("BUK member", html);
+        Assert.DoesNotContain("BCC member", html);
+        Assert.Contains("Ikke valgt", html);
+        Assert.Contains("Rediger", html);
+        Assert.DoesNotContain("Personlisten kunne ikke hentes", html);
+    }
+
     private sealed class DirectoryStub : IMyshareDirectory
     {
         public List<int> Requests { get; } = [];

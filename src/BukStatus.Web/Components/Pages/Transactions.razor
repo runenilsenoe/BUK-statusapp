@@ -1,0 +1,54 @@
+@page "/transactions"
+@rendermode InteractiveServer
+@using BukStatus.Core.Pot
+@using BukStatus.Core.Transactions
+@inject TransactionService Service
+<PageTitle>Transaksjoner · BUK Status</PageTitle>
+<h1>Transaksjoner</h1>
+<p>Alle transaksjoner i valgt periode for valgt klubb, uavhengig av lag og pottens filtre.</p>
+<form @onsubmit="Load" @onsubmit:preventDefault>
+    <label>Fra <input type="date" @bind="from" disabled="@busy" /></label>
+    <label>Til <input type="date" @bind="to" disabled="@busy" /></label>
+    <button type="submit" disabled="@busy">@(busy ? "Henter …" : "Hent transaksjoner")</button>
+</form>
+@if (error is not null) { <p role="alert" class="alert">@error</p> }
+@if (result is not null)
+{
+    <p class="muted">Kilde: @result.Source · hentet @result.FetchedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm"). Data mellomlagres i inntil ti minutter.</p>
+    @if (result.Source == "testdata") { <p class="alert">Dette er syntetiske testdata.</p> }
+    <label>Søk <input type="search" @bind="search" @bind:event="oninput" @bind:after="ResetPage" placeholder="Navn, person-ID, beskrivelse, dato eller beløp" /></label>
+    var filtered = TransactionService.Search(result.Rows, search);
+    var pages = Math.Max(1, (filtered.Count + PageSize - 1) / PageSize);
+    <p>@filtered.Count transaksjoner · Sum for søket: @filtered.Sum(r => r.Amount).ToString("N2") kr</p>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Dato</th><th>Person</th><th>Person-ID</th><th>Beskrivelse</th><th>Timer</th><th>Beløp NOK</th><th>Transaksjons-ID</th></tr></thead>
+        <tbody>
+            @foreach (var row in filtered.Skip((page - 1) * PageSize).Take(PageSize))
+            {
+                <tr><td>@row.Date.ToString("dd.MM.yyyy")</td><td>@(row.PersonName ?? (row.PersonId > 0 ? "Navn ikke oppgitt" : "Uten personkobling"))</td><td>@(row.PersonId > 0 ? row.PersonId.ToString() : "–")</td><td>@(row.Description ?? "–")</td><td>@(row.Hours?.ToString("0.##") ?? "–")</td><td>@row.Amount.ToString("N2")</td><td>@(row.Id?.ToString() ?? "–")</td></tr>
+            }
+            @if (filtered.Count == 0) { <tr><td colspan="7">Ingen transaksjoner funnet.</td></tr> }
+        </tbody>
+    </table></div>
+    <div class="actions"><button disabled="@(page <= 1)" @onclick="() => page--">Forrige</button><span>Side @(page) av @pages</span><button disabled="@(page >= pages)" @onclick="() => page++">Neste</button></div>
+}
+@code {
+    const int PageSize = 50;
+    int page = 1;
+    bool busy;
+    string search = "";
+    string? error;
+    DateTime from = new(DateTime.Today.Year, 1, 1), to = DateTime.Today;
+    TransactionResult? result;
+    protected override async Task OnInitializedAsync() => await Load();
+    void ResetPage() => page = 1;
+    async Task Load()
+    {
+        busy = true; error = null; result = null; page = 1;
+        try { result = await Service.GetAsync(DateOnly.FromDateTime(from), DateOnly.FromDateTime(to)); }
+        catch (GroupException ex) { error = ex.Message; }
+        catch (UnauthorizedAccessException) { error = "Du har ikke tilgang til valgt klubb."; }
+        catch { error = "Transaksjonene kunne ikke hentes. Prøv igjen senere."; }
+        finally { busy = false; }
+    }
+}

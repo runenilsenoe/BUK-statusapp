@@ -111,7 +111,7 @@ public class ExtraContributionsTests
     {
         const string json = """
             {"status":"OK","statusCode":200,"data":[
-              {"id":1,"description":"Donation BUK","transactionDate":"2026-05-01T10:00:00","userId":42,"amount":250.5},
+              {"id":1,"description":"Donation BUK","transactionDate":"2026-05-01T10:00:00","userId":42,"amount":250.5,"userDisplayName":"Synthetic Person","hours":2.5},
               {"id":2,"description":"Uten bruker","transactionDate":"2026-05-02T10:00:00","userId":null,"amount":99}
             ]}
             """;
@@ -128,7 +128,7 @@ public class ExtraContributionsTests
         var result = await source.GetAsync(query, CancellationToken.None);
 
         var contribution = Assert.Single(result);
-        Assert.Equal(new ExtraContribution(42, new DateOnly(2026, 5, 1), 250.5m, "Donation BUK"), contribution);
+        Assert.Equal(new ExtraContribution(42, new DateOnly(2026, 5, 1), 250.5m, "Donation BUK", "Synthetic Person", 1, 2.5m), contribution);
         Assert.Equal("Bearer secret", handler.Request!.Headers.Authorization!.ToString());
         Assert.StartsWith("https://myshare.example/api/ClubTransactions/?clubId=7&fromDate=2026-01-01", handler.Request.RequestUri!.ToString());
     }

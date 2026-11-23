@@ -5,7 +5,7 @@
 <header class="topbar">
     <div class="nav">
         <a href="/" class="brand">BUK Status</a>
-        <AuthorizeView>
+        <AuthorizeView Policy="@AuthSetup.Policy">
             <Authorized>
                 <nav>
                     @if (ClubAccess.Enabled) { <NavLink href="clubs">Klubber</NavLink> }
@@ -14,6 +14,8 @@
                     <NavLink href="report" Match="NavLinkMatch.All">Månedsrapport</NavLink>
                     <NavLink href="report/weeks">Ukerapport</NavLink>
                     <NavLink href="pot">Pott</NavLink>
+                    <NavLink href="transactions">Transaksjoner</NavLink>
+                    <NavLink href="people">Personer</NavLink>
                     <NavLink href="samvirk">Samvirk</NavLink>
                     <NavLink href="settings/targets">Månedsmål</NavLink>
                     @if (context.User.PersonId() == BukStatus.Core.Administration.AdministratorStore.SuperAdminPersonId)
@@ -39,7 +41,7 @@
 </header>
 
 <main class="page">
-    <AuthorizeView><Authorized><ClubSelection /></Authorized></AuthorizeView>
+    <AuthorizeView Policy="@AuthSetup.Policy"><Authorized><ClubSelection /></Authorized></AuthorizeView>
     @Body
 </main>
 
