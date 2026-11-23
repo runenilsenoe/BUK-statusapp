@@ -1,17 +1,13 @@
 @using BukStatus.Core.Clubs
-@inject IClubContext Clubs
+@inject BukStatus.Core.People.IPersonDirectory Directory
 
-@if (!Clubs.Enabled)
-{
-    <input type="number" min="1" value="@Value" @onchange="Changed" aria-label="Person-ID" placeholder="Person-ID" />
-}
-else if (error is not null)
+@if (error is not null)
 {
     <p class="alert">@error</p>
 }
 else
 {
-    <label>Søk etter person <input @bind="search" @bind:event="oninput" placeholder="Navn eller person-ID" /></label>
+    <label>Søk etter person <input type="search" @bind="search" @bind:event="oninput" @bind:after="SearchChanged" placeholder="Skriv et navn eller person-ID" aria-label="Søk etter person" /></label>
     <label>Person fra @clubName
         <select value="@Value" @onchange="Changed" aria-label="Velg medlem fra MyShare">
             <option value="">Velg person …</option>
@@ -21,28 +17,39 @@ else
             }
         </select>
     </label>
+    @if (!members.Any(Matches)) { <p role="status" class="muted">Ingen tilgjengelige personer matcher søket.</p> }
 }
 @code {
     [Parameter] public int? Value { get; set; }
     [Parameter] public EventCallback<int?> ValueChanged { get; set; }
+    [Parameter] public EventCallback<ClubMember?> MemberChanged { get; set; }
     [Parameter] public IEnumerable<int> ExcludedIds { get; set; } = [];
     private IReadOnlyList<ClubMember> members = [];
     private string clubName = "MyShare";
     private string search = "";
     private string? error;
     private readonly DateOnly today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "Europe/Oslo").DateTime);
-    private bool Matches(ClubMember m) => !ExcludedIds.Contains(m.Id) && (m.Id == Value || string.IsNullOrWhiteSpace(search)
-        || m.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase) || m.Id.ToString().Contains(search));
+    private bool Matches(ClubMember m) => !ExcludedIds.Contains(m.Id) && (string.IsNullOrWhiteSpace(search)
+        || search.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .All(word => m.DisplayName.Contains(word, StringComparison.OrdinalIgnoreCase) || m.Id.ToString().Contains(word)));
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            var scope = await Clubs.GetSelectedAsync();
-            if (scope is null) { error = "Aktiver MyShare-klubbtilgang for å hente personvalg."; return; }
+            var scope = await Directory.GetAsync();
             members = scope.Club.Members;
             clubName = scope.Club.Name;
         }
         catch { error = "Kunne ikke hente medlemmer fra MyShare. Prøv å laste siden på nytt."; }
     }
-    private Task Changed(ChangeEventArgs e) => ValueChanged.InvokeAsync(int.TryParse(e.Value?.ToString(), out var id) ? id : null);
+    private async Task SearchChanged()
+    {
+        if (Value is not null) { await ValueChanged.InvokeAsync(null); await MemberChanged.InvokeAsync(null); }
+    }
+    private async Task Changed(ChangeEventArgs e)
+    {
+        var member = int.TryParse(e.Value?.ToString(), out var id) ? members.FirstOrDefault(m => m.Id == id && Matches(m)) : null;
+        await ValueChanged.InvokeAsync(member?.Id);
+        await MemberChanged.InvokeAsync(member);
+    }
 }

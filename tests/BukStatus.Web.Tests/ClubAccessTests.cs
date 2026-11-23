@@ -105,6 +105,29 @@ public sealed class ClubAccessTests : IDisposable
         Assert.DoesNotContain("Personlisten kunne ikke hentes", html);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Team_member_picker_has_name_search_in_both_club_and_legacy_modes(bool clubMode)
+    {
+        using var app = App().WithWebHostBuilder(host => host.UseSetting("ClubAccess:Enabled", clubMode.ToString()));
+        using var client = Client(app, 4050);
+        await using var db = await app.Services.GetRequiredService<Microsoft.EntityFrameworkCore.IDbContextFactory<BukStatus.Core.Groups.BukStatusDbContext>>().CreateDbContextAsync();
+        var team = new BukStatus.Core.Teams.Team { Name = "Searchable members" };
+        db.Teams.Add(team); await db.SaveChangesAsync();
+        var id = team.Id;
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync($"/teams/{id}"));
+        Assert.Contains("type=\"search\"", html);
+        Assert.Contains("Søk etter person", html);
+        Assert.Contains("<option value=\"101\">BUK member", html);
+        Assert.DoesNotContain("BCC member", html);
+        Assert.DoesNotContain("Navn (valgfritt)", html);
+        db.TeamMembers.Add(new BukStatus.Core.Teams.TeamMember { TeamId = id, PersonId = 101, DisplayName = "BUK member" });
+        await db.SaveChangesAsync();
+        html = WebUtility.HtmlDecode(await client.GetStringAsync($"/teams/{id}"));
+        Assert.DoesNotContain("<option value=\"101\">", html);
+    }
+
     private sealed class DirectoryStub : IMyshareDirectory
     {
         public List<int> Requests { get; } = [];

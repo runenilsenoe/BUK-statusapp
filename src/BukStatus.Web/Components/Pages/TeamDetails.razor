@@ -55,11 +55,7 @@ else
     <h2 style="margin-top: 2rem; margin-bottom: 0.75rem;">Medlemmer (@team.Members.Count)</h2>
 
     <form class="inline-form add-member" @onsubmit="AddMember">
-        <MemberPicker @bind-Value="newPersonId" ExcludedIds="team.Members.Select(m => m.PersonId)" />
-        @if (!Clubs.Enabled)
-        {
-            <input @bind="newDisplayName" placeholder="Navn (valgfritt)" aria-label="Navn" maxlength="200" />
-        }
+        <MemberPicker @bind-Value="newPersonId" ExcludedIds="team.Members.Select(m => m.PersonId)" MemberChanged="SelectedMember" />
         <button type="submit" class="primary" disabled="@busy">Legg til</button>
     </form>
 
@@ -128,6 +124,8 @@ else
         await TeamService.UpdateAsync(TeamId, name, leader, bonusPercent / 100);
         saved = true;
     });
+
+    private void SelectedMember(BukStatus.Core.Clubs.ClubMember? member) => newDisplayName = member?.DisplayName;
 
     private Task AddMember() => Run(async () =>
     {
