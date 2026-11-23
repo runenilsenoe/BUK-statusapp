@@ -92,7 +92,7 @@ public sealed class MyshareDirectory(HttpClient client, IOptions<MyshareOptions>
         return rows.Select(row => new MyshareCampaignMember(row.GetProperty("personId").GetInt32(),
             row.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String ? name.GetString() : null,
             row.TryGetProperty("isCountedInAksjon", out var counted) && counted.ValueKind is JsonValueKind.True or JsonValueKind.False ? counted.GetBoolean() : null,
-            row.TryGetProperty("targetAmount", out var target) && target.TryGetDecimal(out var amount) ? amount : null)).ToArray();
+            row.TryGetProperty("targetAmount", out var target) && target.ValueKind == JsonValueKind.Number && target.TryGetDecimal(out var amount) ? amount : null)).ToArray();
     }
     private static ClubMember ParseMember(JsonElement m)
     {
