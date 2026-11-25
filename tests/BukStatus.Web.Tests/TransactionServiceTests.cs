@@ -83,6 +83,14 @@ public sealed class TransactionServiceTests : IDisposable
         var ledger = new TransactionService([new ContributionsSource()], clubs, factory, cache, new Gate(), new Mapping { Empty = true });
         await Assert.ThrowsAsync<GroupException>(() => ledger.GetAsync(new(2026,1,1), new(2026,1,31)));
     }
+    [Fact] public async Task Public_overview_switch_does_not_allow_reading_raw_transactions()
+    {
+        clubs.Enabled = false;
+        using (var db = factory.CreateDbContext()) { (await db.PotSettings.SingleAsync()).PublicScreenEnabled = true; await db.SaveChangesAsync(); }
+        var ledger = new TransactionService([new ContributionsSource()], clubs, factory, cache, new Gate { Denied = true }, new Mapping());
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => ledger.GetAsync(new(2026, 1, 1), new(2026, 1, 31)));
+    }
+
     sealed class Mapping : IClubOrganisationResolver
     {
         public bool Empty;
@@ -103,7 +111,7 @@ public sealed class TransactionServiceTests : IDisposable
         }
     }
     public void Dispose() { cache.Dispose(); Directory.Delete(folder,true); }
-    sealed class Gate : BukStatus.Core.Administration.IWriteAccess { public Task RequireAsync(CancellationToken ct = default) => Task.CompletedTask; }
+    sealed class Gate : BukStatus.Core.Administration.IWriteAccess { public bool Denied; public Task RequireAsync(CancellationToken ct = default) => Denied ? throw new UnauthorizedAccessException() : Task.CompletedTask; }
     sealed class Factory(DbContextOptions<BukStatusDbContext> options) : IDbContextFactory<BukStatusDbContext> { public BukStatusDbContext CreateDbContext()=>new(options); }
     sealed class Clubs : IClubContext
     {

@@ -63,79 +63,19 @@
         }
 
         <h2 class="form-section">Ekstrabidrag</h2>
-        <p class="muted" style="max-width: 760px;">
-            Ekstrabidrag er penger som har kommet inn utenom medlemmenes egne mål, for eksempel gaver fra personer uten
-            bidragsplan. Potten fordeles på dem som ikke er ajour. Bidrag fra alle som er på et lag eller i en gruppe
-            regnes aldri som ekstrabidrag. Ved klubbvisning gjelder dette alle klubbens medlemmer fra MyShare.
-        </p>
-
-        <div class="radio-row">
-            <label><input type="radio" name="extra-mode" checked="@(settings.ExtraMode == ExtraContributionsMode.Automatic)" @onchange="() => SetMode(ExtraContributionsMode.Automatic)" /> Hent automatisk</label>
-            <label><input type="radio" name="extra-mode" checked="@(settings.ExtraMode == ExtraContributionsMode.Manual)" @onchange="() => SetMode(ExtraContributionsMode.Manual)" /> Legg inn manuelt</label>
-        </div>
-
-        @if (settings.ExtraMode == ExtraContributionsMode.Automatic)
-        {
-            <div class="form-grid">
-                @if (!Clubs.Enabled)
-                {
-                    <label>BCC org-ID <input type="number" min="1" @bind="settings.ExtraOrgId" /></label>
-                }
-                <label>
-                    Beskrivelsen må inneholde (valgfritt)
-                    <input @bind="settings.ExtraDescriptionFilter" maxlength="200" placeholder="f.eks. Donation" />
-                </label>
-                <label>
-                    Fra dato
-                    <input type="date" @bind="settings.ExtraFrom" />
-                </label>
-                <label>
-                    Til dato
-                    <input type="date" @bind="settings.ExtraTo" />
-                </label>
-                <label>
-                    Unntatte person-ID-er (valgfritt)
-                    <input @bind="settings.ExtraExcludedPersonIds" maxlength="2000" placeholder="f.eks. tidligere medlemmer: 123;456" />
-                </label>
-            </div>
-            <p class="muted small" style="max-width: 760px;">
-                Uten fra-dato brukes 1. januar i år, og uten til-dato brukes dagens dato. Kildene prøves i denne
-                rekkefølgen, og det manuelle beløpet under brukes hvis ingen av dem svarer:
-            </p>
-            <ol class="source-list small">
-                @foreach (var (name, available) in sources)
-                {
-                    <li>@name: @(available ? "satt opp" : name == "myshare" ? "ikke satt opp (Myshare__BaseUrl, Myshare__Bearer og Myshare__ClubId)" : "mangler org-ID")</li>
-                }
-            </ol>
-        }
-
-        <div class="form-grid" style="grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));">
-            <label>
-                @(settings.ExtraMode == ExtraContributionsMode.Manual ? "Ekstrabidrag (kr)" : "Manuelt beløp hvis hentingen feiler (kr)")
-                <input type="number" min="0" step="any" @bind="settings.ExtraContributions" />
-            </label>
+        <div class="form-grid">
+            <label>Fra dato <input type="date" @bind="settings.ExtraFrom" /></label>
+            <label>Til dato <input type="date" @bind="settings.ExtraTo" /></label>
         </div>
 
         <div class="toolbar">
             <button type="submit" class="primary" disabled="@busy">Lagre</button>
-            @if (settings.ExtraMode == ExtraContributionsMode.Automatic)
-            {
-                <button type="button" @onclick="Test" disabled="@busy">Test henting</button>
-            }
             @if (saved)
             {
                 <span class="muted">Lagret.</span>
             }
         </div>
 
-        @if (test is not null)
-        {
-            <p class="@(test.Warning is null ? "notice" : "alert")">
-                @Format.Kr(test.Amount) @(test.Automatic ? $"fra {test.Count} bidrag i {test.Source}." : $"({test.Source}).")
-                @test.Warning
-            </p>
-        }
     </form>
 
     <h2 class="form-section">Simulering</h2>
@@ -171,8 +111,6 @@
 
 @code {
     private PotSettings? settings;
-    private IReadOnlyList<(string Name, bool Available)> sources = [];
-    private ExtraContributionsResult? test;
     private string? error;
     private bool busy;
     private bool saved;
@@ -194,21 +132,7 @@
         var milestones = settings.MilestoneList.Select(v => (decimal?)v).ToArray();
         milestone1 = milestones.ElementAtOrDefault(0);
         milestone2 = milestones.ElementAtOrDefault(1);
-        await RefreshSources();
         simulationSources = await PotService.GetSourcesAsync();
-    }
-
-    private async Task RefreshSources()
-    {
-        if (settings is not null)
-            sources = await PotService.DescribeExtraSourcesAsync(settings);
-    }
-
-    private async Task SetMode(ExtraContributionsMode mode)
-    {
-        settings!.ExtraMode = mode;
-        test = null;
-        await RefreshSources();
     }
 
     private async Task Save()
@@ -225,7 +149,6 @@
             settings.BukAjourPercentOverride = (await PotService.GetSettingsAsync()).BukAjourPercentOverride;
             await PotService.SaveSettingsAsync(settings);
             saved = true;
-            await RefreshSources();
             if (simulation is not null) await Simulate();
         }
         catch (GroupException ex)
@@ -261,26 +184,4 @@
         finally { simulating = false; }
     }
 
-    /// <summary>Fetches with the current (unsaved) values, so the org id and filter can be tried before saving.</summary>
-    private async Task Test()
-    {
-        if (settings is null)
-            return;
-        busy = true;
-        error = null;
-        test = null;
-        try
-        {
-            await RefreshSources();
-            test = await PotService.GetExtraContributionsAsync(settings);
-        }
-        catch (Exception ex)
-        {
-            error = $"Henting feilet: {ex.Message}";
-        }
-        finally
-        {
-            busy = false;
-        }
-    }
 }

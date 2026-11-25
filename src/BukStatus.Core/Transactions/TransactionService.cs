@@ -16,6 +16,21 @@ public sealed class TransactionService(IEnumerable<IExtraContributionsSource> so
     public async Task<TransactionResult> GetAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
     {
         await access.RequireAsync(ct);
+        return await ReadAsync(from, to, ct);
+    }
+
+    // The public overview may read aggregates only when its existing public-screen switch is enabled.
+    // Raw transaction endpoints always use GetAsync and require administrator access.
+    internal async Task<TransactionResult> GetForOverviewAsync(DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        await using var db = await factory.OpenForClubAsync(clubs, ct);
+        if (!clubs.Enabled && await db.PotSettings.AnyAsync(s => s.PublicScreenEnabled, ct))
+            return await ReadAsync(from, to, ct);
+        return await GetAsync(from, to, ct);
+    }
+
+    private async Task<TransactionResult> ReadAsync(DateOnly from, DateOnly to, CancellationToken ct)
+    {
         if (to < from || to.DayNumber - from.DayNumber > 3660 || from.Year < 2000 || to.Year > 2099)
             throw new GroupException("Velg en gyldig periode på høyst ti år.");
         // Access is verified before consulting a cache shared across requests.

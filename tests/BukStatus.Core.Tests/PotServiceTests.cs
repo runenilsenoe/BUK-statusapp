@@ -1,4 +1,5 @@
 using BukStatus.Core.Groups;
+using BukStatus.Core.Transactions;
 using BukStatus.Core.Samvirk;
 using BukStatus.Core.People;
 using System.Text.Json;
@@ -30,9 +31,7 @@ public sealed class PotServiceTests : IDisposable
         var factory = _factory = new TestDbContextFactory(options);
         _teams = new TeamService(factory);
         _groups = new GroupService(factory);
-        var extra = new ExtraContributionsService([], new MemoryCache(new MemoryCacheOptions()),
-            NullLogger<ExtraContributionsService>.Instance);
-        _pot = new PotService(factory, _teams, _groups, new FakeMemberStatusService(), extra, TimeProvider.System);
+        _pot = new PotService(factory, _teams, _groups, new FakeMemberStatusService(), Ledger(), TimeProvider.System);
     }
 
     public void Dispose() => _connection.Dispose();
@@ -98,8 +97,7 @@ public sealed class PotServiceTests : IDisposable
         var team = await _teams.CreateAsync("Test");
         await _teams.AddMemberAsync(team.Id, 1, "One");
         await _teams.AddMemberAsync(team.Id, 2, "Two");
-        var extra = new ExtraContributionsService([], new MemoryCache(new MemoryCacheOptions()), NullLogger<ExtraContributionsService>.Instance);
-        var pot = new PotService(_factory, _teams, _groups, new FixedStatuses(), extra, TimeProvider.System);
+        var pot = new PotService(_factory, _teams, _groups, new FixedStatuses(), Ledger(new RowsSource([new(0, DateOnly.FromDateTime(DateTime.Today), 1000, "Gave")])), TimeProvider.System);
         var settings = new PotSettings { Title = "Test", ExtraContributions = 1000, SamvirkPercent = 60, Milestones = "72.5;85" };
         await pot.SaveSettingsAsync(settings);
         await pot.SaveAjourPercentAsync(50);
@@ -166,7 +164,7 @@ public sealed class PotServiceTests : IDisposable
         var all = await _pot.GetScreenAsync(null, 500, PotStrategy.Even);
         Assert.Equal(PotSource.AllTeamsKey, all.Source.Key);
         Assert.Equal(3, all.Result.Count);
-        Assert.Equal(1_500m, all.Result.Pot);
+        Assert.Equal(500m, all.Result.Pot);
 
         var team = await _pot.GetScreenAsync(PotSource.TeamKey(a.Id), 0, PotStrategy.Even);
         Assert.Equal("A", team.Source.Name);
@@ -187,8 +185,7 @@ public sealed class PotServiceTests : IDisposable
     public async Task Default_covers_complete_roster_even_without_teams_and_team_selection_remains_limited()
     {
         var roster = new Roster();
-        var extra = new ExtraContributionsService([], new MemoryCache(new MemoryCacheOptions()), NullLogger<ExtraContributionsService>.Instance);
-        var pot = new PotService(_factory, _teams, _groups, new FakeMemberStatusService(), extra, TimeProvider.System, roster: roster);
+        var pot = new PotService(_factory, _teams, _groups, new FakeMemberStatusService(), Ledger(), TimeProvider.System, roster: roster);
         var emptyTeams = await pot.GetScreenAsync(null, 0, PotStrategy.Even);
         Assert.Equal([1, 2, 3, 4], emptyTeams.Result.Members.Select(m => m.PersonId).Order());
         Assert.Equal("BUK test", emptyTeams.Source.Name);
@@ -221,11 +218,10 @@ public sealed class PotServiceTests : IDisposable
         var today = DateOnly.FromDateTime(DateTime.Today);
         var json = "{\"statusCode\":200,\"data\":[{\"userId\":4,\"transactionDate\":\"" + today.ToString("yyyy-MM-dd") + "\",\"amount\":500},{\"userId\":900,\"transactionDate\":\"" + today.ToString("yyyy-MM-dd") + "\",\"amount\":100}]}";
         var source = new MyshareExtraContributionsSource(new HttpFactory(json), Microsoft.Extensions.Options.Options.Create(new MyshareOptions { BaseUrl = "https://synthetic.example/api", Bearer = "synthetic", ClubId = 4050 }));
-        var extra = new ExtraContributionsService([source], new MemoryCache(new MemoryCacheOptions()), NullLogger<ExtraContributionsService>.Instance);
-        var pot = new PotService(_factory, _teams, _groups, new FakeMemberStatusService(), extra, TimeProvider.System, roster: new Roster());
+        var pot = new PotService(_factory, _teams, _groups, new PlanStatuses(new Dictionary<int, decimal> { [4] = 10000 }), Ledger(source), TimeProvider.System, roster: new Roster());
         await pot.SaveSettingsAsync(new PotSettings { Title = "Test", ExtraMode = ExtraContributionsMode.Automatic });
         var result = await pot.GetScreenAsync(null, 0, PotStrategy.Even);
-        Assert.Equal(4, result.Result.Count);
+        Assert.Equal(1, result.Result.Count);
         Assert.Equal(100, result.Extra.Amount); Assert.Equal(1, result.Extra.Count);
     }
     [Fact]
@@ -277,8 +273,7 @@ public sealed class PotServiceTests : IDisposable
                     [new(new(2026,11,1), null, 50, null, null)]))) });
             await db.SaveChangesAsync();
         }
-        var extra = new ExtraContributionsService([], new MemoryCache(new MemoryCacheOptions()), NullLogger<ExtraContributionsService>.Instance);
-        var pot = new PotService(_factory, _teams, _groups, new FakeMemberStatusService(), extra, TimeProvider.System, roster: new Roster(), myshare: new Campaign());
+        var pot = new PotService(_factory, _teams, _groups, new FakeMemberStatusService(), Ledger(), TimeProvider.System, roster: new Roster(), myshare: new Campaign());
         var screen = await pot.GetScreenAsync(PotSource.TeamKey(team.Id), 0, PotStrategy.Even);
         var member = Assert.Single(screen.Result.Members);
         Assert.Equal(1, member.PersonId); Assert.Equal("One", member.DisplayName);
@@ -286,6 +281,50 @@ public sealed class PotServiceTests : IDisposable
         Assert.Equal(150, screen.Samvirk.TotalCoins);
         Assert.Equal(50, screen.SamvirkPercent);
     }
+    [Fact]
+    public async Task Automatic_extra_uses_plan_ids_including_people_outside_roster_and_keeps_refunds_and_unassigned_rows()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        ExtraContribution Row(int id, decimal amount) => new(id, today, amount, "Dugnad");
+        // Member 4 has no plan; donor 900 has one, even though absent from the club roster.
+        var ledger = Ledger(new RowsSource([Row(1, 500), Row(4, 400), Row(900, 900), Row(901, 300), Row(901, -100), Row(0, 50)]));
+        var pot = new PotService(_factory, _teams, _groups, new PlanStatuses(new Dictionary<int, decimal> { [1] = 1000, [4] = 0, [900] = 2000 }), ledger,
+            TimeProvider.System, roster: new Roster());
+        var team = await _teams.CreateAsync("Without plan");
+        await _teams.AddMemberAsync(team.Id, 4, "No plan");
+        var settings = new PotSettings { ExtraMode = ExtraContributionsMode.Manual, ExtraContributions = 99999, ExtraDescriptionFilter = "Does not match", ExtraExcludedPersonIds = "4;901" };
+        await pot.SaveSettingsAsync(settings);
+        var extra = await pot.GetExtraContributionsAsync(settings);
+        Assert.True(extra.Automatic);
+        Assert.Equal(650, extra.Amount);
+        Assert.Equal(4, extra.Count);
+        Assert.Equal(650, (await pot.GetScreenAsync(PotSource.TeamKey(team.Id), 0, PotStrategy.Even)).Extra.Amount);
+        var simulated = await pot.GetScreenAsync(null, 2000, PotStrategy.Even);
+        Assert.Equal(650, simulated.Extra.Amount);
+        Assert.Equal(2650, simulated.Result.Pot);
+        Assert.Equal(2000, simulated.Simulated);
+    }
+
+    [Fact]
+    public async Task Myshare_plan_is_excluded_even_when_person_is_not_counted_in_campaign()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var ledger = Ledger(new RowsSource([new(3, today, 900, "Plan but not counted"), new(4, today, 200, "No plan")]));
+        var pot = new PotService(_factory, _teams, _groups, new PlanStatuses(new Dictionary<int, decimal>()), ledger,
+            TimeProvider.System, roster: new Roster(), myshare: new Campaign());
+        var extra = await pot.GetExtraContributionsAsync(new());
+        Assert.Equal(200, extra.Amount);
+        Assert.Equal(1, extra.Count);
+    }
+
+    [Fact]
+    public async Task Missing_automatic_source_does_not_use_old_manual_amount_as_real_contributions()
+    {
+        var ledger = new TransactionService([], new LegacyClubs(), _factory, new MemoryCache(new MemoryCacheOptions()), new Allow());
+        var pot = new PotService(_factory, _teams, _groups, new FakeMemberStatusService(), ledger, TimeProvider.System);
+        await Assert.ThrowsAsync<GroupException>(() => pot.GetExtraContributionsAsync(new() { ExtraContributions = 99999 }));
+    }
+
     private sealed class Campaign : IMyshareDirectory
     {
         public Task<IReadOnlyList<MyshareClub>> GetClubsAsync(int personId, CancellationToken ct = default) => throw new NotImplementedException();
@@ -306,6 +345,33 @@ public sealed class PotServiceTests : IDisposable
     {
         public bool Denied;
         public Task<ClubScope?> GetAsync(CancellationToken ct = default) => Denied ? throw new UnauthorizedAccessException() : Task.FromResult<ClubScope?>(new(new(4050, 10016, "BUK test", [new(1,"One",null,null,null,20),new(2,"Two",null,null,null,21),new(3,"Three",null,null,null,22),new(4,"No team",null,null,null,23)]),4050));
+    }
+
+    private TransactionService Ledger(params IExtraContributionsSource[] sources) => new(
+        sources.Length == 0 ? [new RowsSource([])] : sources, new LegacyClubs(), _factory,
+        new MemoryCache(new MemoryCacheOptions()), new Allow());
+
+    private sealed class RowsSource(IReadOnlyList<ExtraContribution> rows) : IExtraContributionsSource
+    {
+        public string Name => "Test ledger";
+        public bool CanHandle(ExtraContributionsQuery query) => true;
+        public Task<IReadOnlyList<ExtraContribution>> GetAsync(ExtraContributionsQuery query, CancellationToken ct) => Task.FromResult(rows);
+    }
+    private sealed class PlanStatuses(IReadOnlyDictionary<int, decimal> plans) : IMemberStatusService
+    {
+        public Task<IReadOnlyDictionary<int, MemberStatusSnapshot>> GetStatusesAsync(IEnumerable<int> ids, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<int, MemberStatusSnapshot>>(ids.Where(plans.ContainsKey).ToDictionary(id => id,
+                id => new MemberStatusSnapshot(id, 0, plans[id], plans[id], null, 0)));
+    }
+    private sealed class Allow : BukStatus.Core.Administration.IWriteAccess
+    {
+        public Task RequireAsync(CancellationToken ct = default) => Task.CompletedTask;
+    }
+    private sealed class LegacyClubs : IClubContext
+    {
+        public bool Enabled => false;
+        public Task<ClubScope?> GetSelectedAsync(CancellationToken ct = default) => Task.FromResult<ClubScope?>(null);
+        public Task<IReadOnlyList<MyshareClub>> GetClubsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MyshareClub>>([]);
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<BukStatusDbContext> options)

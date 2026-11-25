@@ -1,4 +1,5 @@
 using BukStatus.Core.Clubs;
+using BukStatus.Core.Transactions;
 using BukStatus.Core.Samvirk;
 using System.Globalization;
 using BukStatus.Core.Groups;
@@ -38,7 +39,7 @@ public class PotService(
     TeamService teams,
     GroupService groups,
     IMemberStatusService statuses,
-    ExtraContributionsService extraContributions,
+    TransactionService transactions,
     TimeProvider time, IClubContext? clubContext = null, BukStatus.Core.Administration.IWriteAccess? writeAccess = null, IPotRoster? roster = null, IMyshareDirectory? myshare = null)
 {
     public DateOnly Today => DateOnly.FromDateTime(time.GetLocalNow().DateTime);
@@ -165,33 +166,23 @@ public class PotService(
         };
     }
 
-    /// <summary>
-    /// The real extra contributions. Everyone in the club counts as a member, so their own
-    /// contributions are never extra, whichever source the screen shows.
-    /// </summary>
+    /// <summary>All club transactions from people without a contribution plan, independent of team selection.</summary>
     public async Task<ExtraContributionsResult> GetExtraContributionsAsync(PotSettings settings, CancellationToken cancellationToken = default)
     {
+        var ledger = await transactions.GetForOverviewAsync(settings.ExtraFrom ?? new DateOnly(Today.Year, 1, 1),
+            settings.ExtraTo ?? Today, cancellationToken);
+        var ids = ledger.Rows.Select(r => r.PersonId).Where(id => id > 0).Distinct().ToArray();
+        var plans = await statuses.GetStatusesAsync(ids, cancellationToken);
+        var plannedIds = plans.Where(p => p.Value.TotalTarget > 0).Select(p => p.Key).ToHashSet();
         var scope = await GetScopeAsync(cancellationToken);
-        return await extraContributions.GetAsync(settings, await GetAllMemberIdsAsync(cancellationToken), Today, cancellationToken,
-            scope?.Club.Id, scope?.Club.TeamId);
-    }
-
-    /// <summary>The extra-contribution sources in the order they're tried, and whether each is set up.</summary>
-    public async Task<IReadOnlyList<(string Name, bool Available)>> DescribeExtraSourcesAsync(PotSettings settings,
-        CancellationToken cancellationToken = default)
-    {
-        var scope = await GetScopeAsync(cancellationToken);
-        return extraContributions.Describe(settings.ToQuery(await GetAllMemberIdsAsync(cancellationToken), Today)
-            with { ClubId = scope?.Club.Id, TeamId = scope?.Club.TeamId });
-    }
-
-    private async Task<HashSet<int>> GetAllMemberIdsAsync(CancellationToken cancellationToken)
-    {
-        var scope = await GetScopeAsync(cancellationToken);
-        if (scope is not null) return scope.Club.Members.Select(m => m.Id).ToHashSet();
-        var ids = (await teams.GetAllAsync(cancellationToken)).SelectMany(t => t.Members).Select(m => m.PersonId).ToHashSet();
-        ids.UnionWith((await groups.GetAllAsync(cancellationToken)).SelectMany(g => g.Members).Select(m => m.PersonId));
-        return ids;
+        if (scope is not null && myshare is not null)
+        {
+            var campaign = await myshare.GetCampaignAsync(scope, Today, cancellationToken);
+            if (campaign is not null)
+                plannedIds.UnionWith(campaign.Where(p => p.TargetAmount > 0).Select(p => p.PersonId));
+        }
+        var extra = ledger.Rows.Where(r => !plannedIds.Contains(r.PersonId)).ToArray();
+        return new(extra.Sum(r => r.Amount), extra.Length, ledger.Source, true, null);
     }
 
     private async Task<(PotSource, List<(int PersonId, string? DisplayName)>)> GetMembersAsync(

@@ -155,6 +155,9 @@ public sealed class LoginFlowTests : IDisposable
         Assert.Contains("Milepæl 2 (%)", html);
         Assert.DoesNotContain("BUK ajourgrense (%)", html);
         Assert.Contains("Simuler ekstra pott", html);
+        Assert.DoesNotContain("Legg inn manuelt", html);
+        Assert.DoesNotContain("Beskrivelsen må inneholde", html);
+        Assert.DoesNotContain("Unntatte person-ID-er", html);
         Assert.Contains("Simulert beløp", html);
         Assert.Contains("Flest mulig ajour", html);
         var overviewResponse = await Send(HttpMethod.Get, "/oversikt", LoginCookie("21410"));
