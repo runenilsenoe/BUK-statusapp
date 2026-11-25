@@ -7,24 +7,7 @@
         <a href="/" class="brand">BUK Status</a>
         <AuthorizeView Policy="@AuthSetup.Policy">
             <Authorized>
-                <nav>
-                    @if (ClubAccess.Enabled) { <NavLink href="clubs">Klubber</NavLink> }
-                    <NavLink href="/" Match="NavLinkMatch.All">Grupper</NavLink>
-                    <NavLink href="teams">Lag</NavLink>
-                    <NavLink href="report" Match="NavLinkMatch.All">Månedsrapport</NavLink>
-                    <NavLink href="report/weeks">Ukerapport</NavLink>
-                    <NavLink href="oversikt">Oversikt</NavLink>
-                    <NavLink href="transactions">Transaksjoner</NavLink>
-                    <NavLink href="people">Personer</NavLink>
-                    <a href="account/myshare/connect" data-enhance-nav="false">Koble til MyShare</a>
-                    <NavLink href="samvirk">Samvirk</NavLink>
-                    <NavLink href="settings/targets">Månedsmål</NavLink>
-                    @if (context.User.PersonId() == BukStatus.Core.Administration.AdministratorStore.SuperAdminPersonId)
-                    {
-                        <NavLink href="administrators">Administratorer</NavLink>
-                        <NavLink href="diagnostics/bcc">API-test</NavLink>
-                    }
-                </nav>
+                <HeroNavigation ShowClubs="ClubAccess.Enabled" IsSuperAdmin="@(context.User.PersonId() == BukStatus.Core.Administration.AdministratorStore.SuperAdminPersonId)" />
             </Authorized>
         </AuthorizeView>
     </div>

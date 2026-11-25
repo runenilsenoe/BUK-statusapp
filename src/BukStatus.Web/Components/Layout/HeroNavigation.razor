@@ -1,0 +1,57 @@
+<nav class="hero-menu" aria-label="Hovedmeny">
+    <NavLink class="hero-link" href="oversikt">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 16v-5m5 5V7m5 9v-8" /></svg>
+        Oversikt
+    </NavLink>
+
+    <details class="hero-group" name="main-navigation" data-menu="people">
+        <summary>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /><circle cx="9" cy="7" r="4" /></svg>
+            Personer og lag <span class="chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="hero-panel">
+            <section><h2>Medlemmer</h2><NavLink href="people">Personer</NavLink></section>
+            <section><h2>Organisering</h2><NavLink href="teams">Lag</NavLink><NavLink href="/" Match="NavLinkMatch.All">Grupper</NavLink></section>
+        </div>
+    </details>
+
+    <details class="hero-group" name="main-navigation" data-menu="reports">
+        <summary>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 0v6h6M8 13h8m-8 4h8" /></svg>
+            Rapporter <span class="chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="hero-panel">
+            <section><h2>Rapporter</h2><NavLink href="report" Match="NavLinkMatch.All">Månedsrapport</NavLink><NavLink href="report/weeks">Ukerapport</NavLink></section>
+            <section><h2>Datagrunnlag</h2><NavLink href="transactions">Transaksjoner</NavLink><NavLink href="samvirk">Samvirk</NavLink></section>
+        </div>
+    </details>
+
+    <details class="hero-group" name="main-navigation" data-menu="configuration">
+        <summary>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm-2-5h4l.7 2.5 2.2 1.3 2.5-.6 2 3.5-1.8 1.9v2.8l1.8 1.9-2 3.5-2.5-.6-2.2 1.3L14 23h-4l-.7-2.5-2.2-1.3-2.5.6-2-3.5 1.8-1.9v-2.8L2.6 9.7l2-3.5 2.5.6 2.2-1.3Z" transform="translate(0 -1) scale(1 .96)" /></svg>
+            Konfigurasjon <span class="chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="hero-panel configuration-panel">
+            <section>
+                <h2>Oppsett</h2>
+                <NavLink href="settings/targets">Månedsmål</NavLink>
+                <NavLink href="settings/oversikt">Oversiktsinnstillinger</NavLink>
+                @if (ShowClubs) { <NavLink href="clubs">Klubber</NavLink> }
+            </section>
+            <section>
+                <h2>Tilgang</h2>
+                <a href="account/myshare/connect" data-enhance-nav="false">Koble til MyShare</a>
+                @if (IsSuperAdmin) { <NavLink href="administrators">Administratorer</NavLink> }
+            </section>
+            @if (IsSuperAdmin)
+            {
+                <section class="diagnostics"><h2>Diagnostikk</h2><NavLink href="diagnostics/bcc">API-test</NavLink></section>
+            }
+        </div>
+    </details>
+</nav>
+
+@code {
+    [Parameter] public bool ShowClubs { get; set; }
+    [Parameter] public bool IsSuperAdmin { get; set; }
+}

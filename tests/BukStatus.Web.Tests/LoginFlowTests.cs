@@ -435,6 +435,25 @@ public sealed class LoginFlowTests : IDisposable
         Assert.Equal(HttpStatusCode.Redirect, (await Send(HttpMethod.Get, "/pot")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Get, "/api/pot")).StatusCode);
     }
+    [Theory]
+    [InlineData("21410", true)]
+    [InlineData(AllowedPersonId, false)]
+    public async Task Configuration_menu_groups_settings_and_preserves_superadmin_visibility(string personId, bool superadmin)
+    {
+        var response = await Send(HttpMethod.Get, "/oversikt", LoginCookie(personId));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+        var configuration = Regex.Match(html, "<details[^>]*data-menu=\"configuration\".*?</details>", RegexOptions.Singleline).Value;
+        Assert.NotEmpty(configuration);
+        Assert.Contains("Månedsmål", configuration);
+        Assert.Contains("Oversiktsinnstillinger", configuration);
+        Assert.Contains("Koble til MyShare", configuration);
+        Assert.Equal(superadmin, configuration.Contains("Administratorer"));
+        Assert.Equal(superadmin, configuration.Contains("API-test"));
+        Assert.Contains("Personer og lag", html);
+        Assert.Contains("data-menu=\"reports\"", html);
+    }
+
     [Fact]
     public async Task Superadmin_page_does_not_require_legacy_allowlist_and_is_hidden_from_other_users()
     {
