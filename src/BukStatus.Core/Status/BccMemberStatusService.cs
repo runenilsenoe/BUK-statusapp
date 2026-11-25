@@ -10,7 +10,8 @@ namespace BukStatus.Core.Status;
 public class BccMemberStatusService(IContributionsApiClient client, IMemoryCache cache) : IMemberStatusService
 {
     private const int MaxBatchSize = 200;
-    public static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(1);
+    // Keep the cache shorter than the overview's five-second polling interval.
+    public static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(4);
 
     public async Task<IReadOnlyDictionary<int, MemberStatusSnapshot>> GetStatusesAsync(
         IEnumerable<int> personIds, CancellationToken cancellationToken = default)

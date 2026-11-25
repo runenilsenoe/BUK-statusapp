@@ -62,7 +62,8 @@ public sealed class TransactionService(IEnumerable<IExtraContributionsSource> so
             catch (MyshareDirectoryException) { throw; }
             catch (Exception ex) when (ex is not OperationCanceledException) { throw new GroupException("Kunne ikke hente transaksjoner. Kontroller API-tilgang og prøv igjen."); }
             result = new(rows.Where(r => r.Date >= from && r.Date <= to).OrderByDescending(r => r.Date).ThenByDescending(r => r.Id).ToArray(), source.Name, DateTimeOffset.UtcNow);
-            cache.Set(key, result, TimeSpan.FromMinutes(10));
+            // Leave headroom for the overview's five-second refresh.
+            cache.Set(key, result, TimeSpan.FromSeconds(4));
         }
         var names = scope?.Club.Members.ToDictionary(m => m.Id, m => m.DisplayName);
         return result with { Rows = result.Rows.Select(r => r with { PersonName = r.PersonName ?? names?.GetValueOrDefault(r.PersonId) }).ToArray() };

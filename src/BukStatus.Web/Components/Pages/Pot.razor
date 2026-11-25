@@ -58,7 +58,7 @@
 @code {
     [SupplyParameterFromQuery(Name = "kilde")] public string? Kilde { get; set; }
 
-    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
 
     private List<PotSource> sources = [];
     private string sourceKey = PotSource.AllTeamsKey;
