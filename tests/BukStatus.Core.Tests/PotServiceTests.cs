@@ -316,11 +316,15 @@ public sealed class PotServiceTests : IDisposable
         Assert.True(extra.Automatic);
         Assert.Equal(650, extra.Amount);
         Assert.Equal(4, extra.Count);
-        Assert.Equal(650, (await pot.GetScreenAsync(PotSource.TeamKey(team.Id), 0, PotStrategy.Even)).Extra.Amount);
+        var teamScreen = await pot.GetScreenAsync(PotSource.TeamKey(team.Id), 0, PotStrategy.Even);
+        Assert.Equal(650, teamScreen.Extra.Amount);
+        Assert.Equal(400, teamScreen.Collection!.Total);
         var simulated = await pot.GetScreenAsync(null, 2000, PotStrategy.Even);
         Assert.Equal(650, simulated.Extra.Amount);
         Assert.Equal(2650, simulated.Result.Pot);
         Assert.Equal(2000, simulated.Simulated);
+        Assert.Equal(2050, simulated.Collection!.Total);
+        Assert.Equal(2050, simulated.Collection.Revenue);
     }
 
     [Fact]

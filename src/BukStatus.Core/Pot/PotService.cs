@@ -29,6 +29,7 @@ public record PotSource(string Key, string Name)
 public record PotScreen(PotSource Source, PotSettings Settings, ExtraContributionsResult Extra, decimal Simulated, PotResult Result)
 {
     public SamvirkProgress? Samvirk { get; init; }
+    public CollectionTotals? Collection { get; init; }
     public decimal? SamvirkPercent => Samvirk is null ? Settings.SamvirkPercent : Samvirk.Percent;
     public decimal? CombinedPercent => Result.Count > 0 && SamvirkPercent is { } percent ? Result.CombinedPercent(percent) : null;
 }
@@ -131,6 +132,7 @@ public class PotService(
     {
         var settings = await GetSettingsAsync(cancellationToken);
         var (source, members) = await GetMembersAsync(sourceKey, cancellationToken);
+        var selectedPersonIds = members.Select(m => m.PersonId).ToHashSet();
         var scope = await GetScopeAsync(cancellationToken);
         var campaign = scope is null || myshare is null ? null : await myshare.GetCampaignAsync(scope, Today, cancellationToken);
         var campaignById = campaign?.ToDictionary(p => p.PersonId);
@@ -146,12 +148,13 @@ public class PotService(
             .Select(m => (m.PersonId, DisplayName: FirstName(rosterById?.GetValueOrDefault(m.PersonId)?.DisplayName,
                 campaignById?.GetValueOrDefault(m.PersonId)?.Name, m.DisplayName))).ToList();
         var statusTask = statuses.GetStatusesAsync(members.Select(m => m.PersonId), cancellationToken);
-        var extraTask = GetExtraContributionsAsync(settings, cancellationToken);
+        var ledgerTask = GetLedgerAsync(settings, cancellationToken);
         var memberStatuses = await statusTask;
         if (settings.BukAjourPercentOverride is { } ajourPercent)
             memberStatuses = memberStatuses.ToDictionary(p => p.Key,
                 p => p.Value with { AjourTarget = p.Value.TotalTarget * ajourPercent / 100, AjourUntil = null });
-        var extra = await extraTask;
+        var ledger = await ledgerTask;
+        var extra = await CalculateExtraAsync(ledger, cancellationToken);
 
         simulated = Math.Max(0, simulated);
         var result = PotSimulator.Simulate(
@@ -162,6 +165,9 @@ public class PotService(
         var snapshot = await SamvirkService.ReadLatestAsync(db, cancellationToken);
         return new PotScreen(source, settings, extra, simulated, result)
         {
+            Collection = CollectionTotals.Build(source.Key == PotSource.AllTeamsKey ? ledger.Rows
+                : ledger.Rows.Where(r => selectedPersonIds.Contains(r.PersonId)),
+                settings.ExtraFrom ?? new DateOnly(Today.Year, 1, 1), settings.ExtraTo ?? Today),
             Samvirk = snapshot is null ? null : SamvirkProgress.Build(snapshot, samvirkMemberIds)
         };
     }
@@ -169,8 +175,14 @@ public class PotService(
     /// <summary>All club transactions from people without a contribution plan, independent of team selection.</summary>
     public async Task<ExtraContributionsResult> GetExtraContributionsAsync(PotSettings settings, CancellationToken cancellationToken = default)
     {
-        var ledger = await transactions.GetForOverviewAsync(settings.ExtraFrom ?? new DateOnly(Today.Year, 1, 1),
-            settings.ExtraTo ?? Today, cancellationToken);
+        return await CalculateExtraAsync(await GetLedgerAsync(settings, cancellationToken), cancellationToken);
+    }
+
+    private Task<TransactionResult> GetLedgerAsync(PotSettings settings, CancellationToken ct) =>
+        transactions.GetForOverviewAsync(settings.ExtraFrom ?? new DateOnly(Today.Year, 1, 1), settings.ExtraTo ?? Today, ct);
+
+    private async Task<ExtraContributionsResult> CalculateExtraAsync(TransactionResult ledger, CancellationToken cancellationToken)
+    {
         var ids = ledger.Rows.Select(r => r.PersonId).Where(id => id > 0).Distinct().ToArray();
         var plans = await statuses.GetStatusesAsync(ids, cancellationToken);
         var plannedIds = plans.Where(p => p.Value.TotalTarget > 0).Select(p => p.Key).ToHashSet();

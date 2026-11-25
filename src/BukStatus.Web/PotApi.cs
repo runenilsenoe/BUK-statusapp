@@ -24,6 +24,7 @@ public static class PotApi
                     ExtraContributionsWarning = screen.Extra.Warning,
                     Milestones = screen.Settings.MilestoneList,
                     screen.Simulated,
+                    screen.Collection,
                     Strategy = result.Strategy.ToString(),
                     result.Pot,
                     result.PotUsed,

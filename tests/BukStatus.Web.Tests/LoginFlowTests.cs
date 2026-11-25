@@ -164,6 +164,9 @@ public sealed class LoginFlowTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, overviewResponse.StatusCode);
         var overview = WebUtility.HtmlDecode(await overviewResponse.Content.ReadAsStringAsync());
         Assert.Contains("BUK ajourgrense (%)", overview);
+        Assert.Contains("Samlet inn totalt", overview);
+        Assert.Contains("Inntekter", overview);
+        Assert.Contains("Driftsdugnad / pappbuene", overview);
         Assert.Contains("placeholder=\"Automatisk\"", overview);
         Assert.DoesNotContain("Simuler ekstra pott", overview);
         Assert.DoesNotContain("Simulert beløp", overview);

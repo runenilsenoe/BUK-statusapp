@@ -6,6 +6,16 @@
     <p class="notice">@Screen.Extra.Warning</p>
 }
 
+@if (Screen.Collection is { } collection)
+{
+    <dl class="pot-facts" aria-label="Innsamling">
+        <div><dt>Samlet inn totalt</dt><dd>@Format.Kr(collection.Total)</dd></div>
+        <div><dt>Inntekter</dt><dd>@Format.Kr(collection.Revenue)</dd></div>
+        <div><dt>Driftsdugnad / pappbuene</dt><dd>@Format.Kr(collection.Operations)</dd></div>
+    </dl>
+    <p class="muted small">@collection.From.ToString("dd.MM.yyyy")–@collection.To.ToString("dd.MM.yyyy")</p>
+}
+
 @if (result.Count > 0 || Screen.Samvirk?.ActiveCount > 0)
 {
     <section class="pot-scores">
