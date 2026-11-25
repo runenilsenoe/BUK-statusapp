@@ -273,3 +273,21 @@ nettleserøkten bruker alltid den innloggede brukerens token, selv om en statisk
 `MYSHARE_BEARER` er satt. Transaksjons-/ekstrabidrags-cache er adskilt per request/
 Blazor-økt. Maskinklienter og ubetjent Telegram-innhenting låner aldri en brukerøkt;
 den eksisterende manuelle maskintilkoblingen krever fortsatt eget oppsett.
+
+
+## Samvirk API-test
+
+Under Konfigurasjon → API-test kan superadministrator kjøre «Test Samvirk».
+Testen bruker det samme `/SamvirkStatus/myStatus`-endepunktet som aksjon.bcc.no
+på `https://ca-aksjonapp-api.kindisland-edecf2b1.westeurope.azurecontainerapps.io`.
+Den prøver et Contributions-token fra eksisterende API-klient, den innloggede
+brukerens MyShare-token, og et separat client_credentials-token med samme
+API-klient og audience `aksjon.bcc.no`. Den siste testen ber ikke om udokumenterte
+scopes. Tokens holdes i minnet og erstatter ingen innlogging eller eksisterende grant.
+
+Testen viser HTTP-status og kjente feltnavn, aldri tokens, rå feil eller personverdier.
+204 betyr ingen personstatus, og 200 med ukjent format bekrefter ikke Samvirk-data.
+`myStatus` gjelder egen bruker; et vellykket kall dokumenterer ikke tilgang til en
+komplett klubb-/medlemsliste. Testen endrer ikke importerte Samvirk-data.
+Avvist Aksjon-token må avklares med BCC: tilgang til audience og om API-et krever
+brukerinnlogging fremfor client_credentials.

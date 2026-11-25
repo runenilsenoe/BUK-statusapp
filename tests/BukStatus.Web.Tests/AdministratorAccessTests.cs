@@ -73,6 +73,113 @@ public sealed class AdministratorAccessTests : IDisposable
         Assert.Contains(results, r => r.Name == "Klubb–organisasjon-kobling" && r.Result == "API avvist" && r.HttpStatus == 401);
         Assert.DoesNotContain("TOP_SECRET", System.Text.Json.JsonSerializer.Serialize(results));
     }
+    [Theory]
+    [InlineData(12345, "oidc")]
+    [InlineData(21410, ApiKeyAuthenticationHandler.SchemeName)]
+    public async Task Samvirk_diagnostics_require_superadmin_browser_identity(int person, string authentication)
+    {
+        var network = new SamvirkNetwork();
+        var tokens = new ProbeUserToken();
+        var service = new BukStatus.Web.Diagnostics.SamvirkDiagnostics(Access(person, authentication), network, ProbeConfig(), tokens);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.RunAsync());
+        Assert.Empty(network.TokenForms);
+        Assert.Empty(network.ApiTokens);
+        Assert.Equal(0, tokens.Calls);
+    }
+
+    [Fact]
+    public async Task Samvirk_tests_existing_tokens_and_separate_audience_without_exposing_values()
+    {
+        var network = new SamvirkNetwork();
+        var service = new BukStatus.Web.Diagnostics.SamvirkDiagnostics(Access(21410), network, ProbeConfig(), new ProbeUserToken());
+        var results = await service.RunAsync();
+        Assert.Equal(3, results.Count);
+        Assert.Equal(401, results[0].HttpStatus);
+        Assert.Equal(401, results[1].HttpStatus);
+        Assert.Equal("OK – Samvirk-data tilgjengelig", results[2].Result);
+        Assert.Contains("samvirkCoin", results[2].Summary);
+        Assert.Contains("ikke en komplett medlemsliste", results[2].Summary);
+        Assert.Equal(new[] { "TOP_SECRET_CONTRIBUTIONS", "TOP_SECRET_USER", "TOP_SECRET_AKSJON" }, network.ApiTokens);
+        Assert.Equal(2, network.TokenForms.Count);
+        Assert.Contains("scope=contributions#read", network.TokenForms[0]);
+        Assert.Contains("audience=aksjon.bcc.no", network.TokenForms[1]);
+        Assert.DoesNotContain("scope=", network.TokenForms[1]);
+        var output = System.Text.Json.JsonSerializer.Serialize(results);
+        Assert.DoesNotContain("TOP_SECRET", output);
+        Assert.DoesNotContain("999999", output);
+        Assert.DoesNotContain("SensitiveName", output);
+    }
+
+    [Theory]
+    [InlineData(204, "", "OK – ingen personstatus")]
+    [InlineData(200, "<html>TOP_SECRET</html>", "Ukjent svarformat")]
+    [InlineData(200, "{\"unexpected\":\"TOP_SECRET\"}", "Ukjent svarformat")]
+    [InlineData(200, "{\"year\":2026,\"personId\":21410}", "Ukjent svarformat")]
+    [InlineData(403, "TOP_SECRET", "API avvist")]
+    public async Task Samvirk_distinguishes_missing_data_bad_format_and_denied_access(int status, string body, string expected)
+    {
+        var network = new SamvirkNetwork { Status = status, Body = body };
+        var service = new BukStatus.Web.Diagnostics.SamvirkDiagnostics(Access(21410), network, ProbeConfig(), new ProbeUserToken());
+        var results = await service.RunAsync();
+        Assert.Equal(expected, results[2].Result);
+        Assert.DoesNotContain("TOP_SECRET", System.Text.Json.JsonSerializer.Serialize(results));
+    }
+
+    [Fact]
+    public async Task Missing_user_token_and_rejected_audience_do_not_stop_other_tests()
+    {
+        var network = new SamvirkNetwork { RejectAudience = true };
+        var service = new BukStatus.Web.Diagnostics.SamvirkDiagnostics(Access(21410), network, ProbeConfig(), new ProbeUserToken { Missing = true });
+        var results = await service.RunAsync();
+        Assert.Equal(3, results.Count);
+        Assert.Equal("API avvist", results[0].Result);
+        Assert.Equal("Ikke kjørt", results[1].Result);
+        Assert.Equal("Token avvist", results[2].Result);
+        Assert.DoesNotContain("TOP_SECRET", System.Text.Json.JsonSerializer.Serialize(results));
+    }
+
+    static IConfiguration ProbeConfig() => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        { ["BccApi:ClientId"] = "client", ["BccApi:ClientSecret"] = "secret" }).Build();
+
+    private sealed class ProbeUserToken : BukStatus.Core.Clubs.IMyshareTokenProvider
+    {
+        public bool CanUse => true;
+        public int Calls;
+        public bool Missing;
+        public Task<string> GetAsync(CancellationToken ct = default)
+        {
+            Calls++;
+            if (Missing) throw new BukStatus.Core.Clubs.MyshareDirectoryException("TOP_SECRET");
+            return Task.FromResult("TOP_SECRET_USER");
+        }
+    }
+    private sealed class SamvirkNetwork : HttpMessageHandler, IHttpClientFactory
+    {
+        public readonly List<string> TokenForms = [];
+        public readonly List<string> ApiTokens = [];
+        public int Status = 200;
+        public string Body = "[{\"personId\":999999,\"year\":2026,\"month\":11,\"samvirkCoin\":100,\"displayName\":\"SensitiveName\",\"TOP_SECRET\":\"TOP_SECRET\"}]";
+        public bool RejectAudience;
+        public HttpClient CreateClient(string name) => new(this, disposeHandler: false);
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            if (request.Method == HttpMethod.Post)
+            {
+                Assert.Equal("login.bcc.no", request.RequestUri!.Host);
+                var form = Uri.UnescapeDataString(await request.Content!.ReadAsStringAsync(ct));
+                TokenForms.Add(form);
+                if (form.Contains("audience=aksjon.bcc.no") && RejectAudience) return Reply(403, "TOP_SECRET");
+                return Reply(200, "{\"access_token\":\"" + (form.Contains("contributions#read") ? "TOP_SECRET_CONTRIBUTIONS" : "TOP_SECRET_AKSJON") + "\"}");
+            }
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal(BukStatus.Web.Diagnostics.SamvirkDiagnostics.Endpoint, request.RequestUri!.AbsoluteUri);
+            var token = request.Headers.Authorization!.Parameter!;
+            ApiTokens.Add(token);
+            return token == "TOP_SECRET_AKSJON" ? Reply(Status, Body) : Reply(401, "TOP_SECRET");
+        }
+        static HttpResponseMessage Reply(int code, string body) => new((System.Net.HttpStatusCode)code) { Content = new StringContent(body) };
+    }
+
     private sealed class ProbeNetwork : HttpMessageHandler, IHttpClientFactory
     {
         public int Calls;

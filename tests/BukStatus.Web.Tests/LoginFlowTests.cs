@@ -455,6 +455,15 @@ public sealed class LoginFlowTests : IDisposable
     }
 
     [Fact]
+    public async Task Samvirk_probe_button_is_available_only_to_superadmin()
+    {
+        var super = WebUtility.HtmlDecode(await (await Send(HttpMethod.Get, "/diagnostics/bcc", LoginCookie("21410"))).Content.ReadAsStringAsync());
+        Assert.Contains("Test Samvirk", super);
+        var ordinary = WebUtility.HtmlDecode(await (await Send(HttpMethod.Get, "/diagnostics/bcc", LoginCookie(AllowedPersonId))).Content.ReadAsStringAsync());
+        Assert.DoesNotContain("Test Samvirk", ordinary);
+    }
+
+    [Fact]
     public async Task Superadmin_page_does_not_require_legacy_allowlist_and_is_hidden_from_other_users()
     {
         var super = await Send(HttpMethod.Get, "/administrators", LoginCookie("21410"));
