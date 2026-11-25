@@ -50,10 +50,10 @@
 
     <section class="pot-milestones" aria-label="Samlet mot målene">
         <div class="pot-milestone-track">
-            <div class="pot-milestone-fill" style="width: @Css(Math.Clamp(combined ?? 0, 0, 100))%"></div>
+            <div class="pot-milestone-fill" style="width: @Css(Position(combined ?? 0))%"></div>
             @foreach (var milestone in settings.MilestoneList)
             {
-                <div class="pot-milestone @(combined >= milestone ? "hit" : "")" style="left: @Css(milestone)%">
+                <div class="pot-milestone @(combined >= milestone ? "hit" : "")" style="left: @Css(Position(milestone))%">
                     <span>@Format.Pct(milestone)</span>
                 </div>
             }
@@ -107,6 +107,9 @@ else
     private PotResult result => Screen.Result;
     private PotSettings settings => Screen.Settings;
     private decimal? combined => Screen.CombinedPercent;
+
+    private decimal Scale => Math.Max(100, Math.Max(combined ?? 0, settings.MilestoneList.DefaultIfEmpty().Max()));
+    private decimal Position(decimal value) => Math.Clamp(value / Scale * 100, 0, 100);
 
     private static string Css(decimal value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 }

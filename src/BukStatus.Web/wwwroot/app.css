@@ -275,7 +275,7 @@ a.button {
 .pot-score .value { font-size: 2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .pot-combined { border-color: var(--pot); }
 
-.pot-milestones { padding: 1.9rem 0 1.9rem; margin-bottom: 0.25rem; }
+.pot-milestones { padding: 1.9rem 2rem; margin-bottom: 0.25rem; }
 .pot-milestone-track { position: relative; height: 14px; background: var(--track); border-radius: 7px; }
 .pot-milestone-fill { height: 100%; border-radius: 7px; background: var(--pot); transition: width 0.4s ease; }
 .pot-milestone { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: 0.5; }

@@ -124,7 +124,6 @@ public sealed class PotServiceTests : IDisposable
 
     [Theory]
     [InlineData(-1)]
-    [InlineData(101)]
     public async Task Ajour_override_rejects_invalid_percentages(decimal percent)
     {
         await Assert.ThrowsAsync<GroupException>(() => _pot.SaveSettingsAsync(new() { BukAjourPercentOverride = percent }));
@@ -136,10 +135,29 @@ public sealed class PotServiceTests : IDisposable
     [InlineData(0)]
     [InlineData(100)]
     [InlineData(72.5)]
+    [InlineData(125.5)]
     public async Task Ajour_override_accepts_bounds_and_fractional_percentages(decimal percent)
     {
         await _pot.SaveSettingsAsync(new() { BukAjourPercentOverride = percent });
         Assert.Equal(percent, (await _pot.GetSettingsAsync()).BukAjourPercentOverride);
+    }
+
+    [Fact]
+    public async Task Milestones_and_ajour_threshold_can_exceed_one_hundred_percent()
+    {
+        var team = await _teams.CreateAsync("Test");
+        await _teams.AddMemberAsync(team.Id, 1, "One");
+        var pot = new PotService(_factory, _teams, _groups, new FixedStatuses(), Ledger(), TimeProvider.System);
+        await pot.SaveSettingsAsync(new() { Milestones = "110;125.5", BukAjourPercentOverride = 120 });
+        var saved = await pot.GetSettingsAsync();
+        Assert.Equal([110m, 125.5m], saved.MilestoneList);
+        Assert.Equal(120, saved.BukAjourPercentOverride);
+        var screen = await pot.GetScreenAsync(null, 0, PotStrategy.Even);
+        var member = Assert.Single(screen.Result.Members);
+        Assert.Equal(12000, member.Status.AjourTarget);
+        Assert.Equal(7000, member.RemainingWithPot);
+        await pot.SaveAjourPercentAsync(130);
+        Assert.Equal(130, (await pot.GetSettingsAsync()).BukAjourPercentOverride);
     }
 
     private sealed class FixedStatuses : IMemberStatusService

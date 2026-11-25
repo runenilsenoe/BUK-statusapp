@@ -101,8 +101,8 @@ public class PotSimulatorTests
     [Fact]
     public void Milestones_are_parsed_sorted_and_invalid_ones_dropped()
     {
-        var settings = new PotSettings { Milestones = "75; 70;abc;150" };
+        var settings = new PotSettings { Milestones = "75; 70;abc;150;0;-5" };
 
-        Assert.Equal([70m, 75m], settings.MilestoneList);
+        Assert.Equal([70m, 75m, 150m], settings.MilestoneList);
     }
 }

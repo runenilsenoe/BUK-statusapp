@@ -57,14 +57,14 @@ public class PotService(
             throw new GroupException("Skjermen må ha en overskrift.");
         if (settings.SamvirkPercent is < 0 or > 100)
             throw new GroupException("Samvirk må være mellom 0 og 100 %.");
-        if (settings.BukAjourPercentOverride is < 0 or > 100)
-            throw new GroupException("BUK ajourgrense må være mellom 0 og 100 %.");
+        if (settings.BukAjourPercentOverride is < 0)
+            throw new GroupException("BUK ajourgrense kan ikke være negativ.");
         if (settings.ExtraContributions < 0)
             throw new GroupException("Ekstrabidrag kan ikke være negativt.");
 
         var milestones = PotSettings.Split(settings.Milestones);
-        if (milestones.Any(m => !decimal.TryParse(m, NumberStyles.Number, CultureInfo.InvariantCulture, out var v) || v is <= 0 or > 100))
-            throw new GroupException("Målene må være tall mellom 1 og 100, skilt med semikolon (f.eks. 70;75).");
+        if (milestones.Any(m => !decimal.TryParse(m, NumberStyles.Number, CultureInfo.InvariantCulture, out var v) || v <= 0))
+            throw new GroupException("Milepælene må være positive tall, skilt med semikolon.");
 
         var excluded = PotSettings.Split(settings.ExtraExcludedPersonIds);
         if (excluded.Any(v => !int.TryParse(v, NumberStyles.None, CultureInfo.InvariantCulture, out var id) || id <= 0))
@@ -101,8 +101,8 @@ public class PotService(
     public async Task SaveAjourPercentAsync(decimal? percent, CancellationToken cancellationToken = default)
     {
         if (writeAccess is not null) await writeAccess.RequireAsync(cancellationToken);
-        if (percent is < 0 or > 100)
-            throw new GroupException("BUK ajourgrense må være mellom 0 og 100 %.");
+        if (percent is < 0)
+            throw new GroupException("BUK ajourgrense kan ikke være negativ.");
         await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
         var settings = await db.PotSettings.FirstOrDefaultAsync(cancellationToken);
         if (settings is null)

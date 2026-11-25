@@ -38,7 +38,7 @@
         <section class="pot-controls">
             <label>
                 <span>BUK ajourgrense (%)</span>
-                <input type="number" min="0" max="100" step="any" @bind="ajourOverride" @bind:after="SaveAjour" placeholder="Automatisk" disabled="@(loading || savingAjour)" />
+                <input type="number" min="0" step="any" @bind="ajourOverride" @bind:after="SaveAjour" placeholder="Automatisk" disabled="@(loading || savingAjour)" />
             </label>
             <label class="pot-check"><input type="checkbox" @bind="sound" /> Lyd når noen blir ajour</label>
             <button type="button" @onclick="Load" disabled="@(loading || savingAjour)">Oppdater nå</button>

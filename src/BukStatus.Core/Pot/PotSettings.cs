@@ -62,7 +62,7 @@ public class PotSettings
     public IReadOnlyList<decimal> MilestoneList =>
         Split(Milestones)
             .Select(m => decimal.TryParse(m, NumberStyles.Number, CultureInfo.InvariantCulture, out var v) ? v : -1)
-            .Where(v => v is > 0 and <= 100)
+            .Where(v => v > 0)
             .Order()
             .ToList();
 

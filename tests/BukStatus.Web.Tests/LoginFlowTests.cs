@@ -172,6 +172,25 @@ public sealed class LoginFlowTests : IDisposable
     }
 
     [Fact]
+    public async Task Overview_scales_milestones_above_one_hundred_percent()
+    {
+        var factory = _app.Services.GetRequiredService<IDbContextFactory<BukStatusDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        db.Teams.Add(new Team { Name = "Test", Members = [new() { PersonId = 10001, DisplayName = "Synthetic" }] });
+        db.PotSettings.Add(new() { Milestones = "110;125", BukAjourPercentOverride = 120 });
+        await db.SaveChangesAsync();
+        var response = await Send(HttpMethod.Get, "/oversikt", LoginCookie("21410"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+        Assert.Matches(@"110\s*%", html);
+        Assert.Matches(@"125\s*%", html);
+        Assert.Contains("left: 88%", html);
+        Assert.Contains("left: 100%", html);
+        Assert.DoesNotContain("left: 110%", html);
+        Assert.DoesNotContain("left: 125%", html);
+    }
+
+    [Fact]
     public async Task Monthly_report_has_team_tabs_and_scopes_samvirk_rows_to_selected_team()
     {
         var factory = _app.Services.GetRequiredService<IDbContextFactory<BukStatusDbContext>>();
