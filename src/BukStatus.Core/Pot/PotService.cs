@@ -97,6 +97,22 @@ public class PotService(
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task SaveAjourPercentAsync(decimal? percent, CancellationToken cancellationToken = default)
+    {
+        if (writeAccess is not null) await writeAccess.RequireAsync(cancellationToken);
+        if (percent is < 0 or > 100)
+            throw new GroupException("BUK ajourgrense må være mellom 0 og 100 %.");
+        await using var db = await dbFactory.OpenForClubAsync(clubContext, cancellationToken);
+        var settings = await db.PotSettings.FirstOrDefaultAsync(cancellationToken);
+        if (settings is null)
+        {
+            settings = new PotSettings();
+            db.PotSettings.Add(settings);
+        }
+        settings.BukAjourPercentOverride = percent;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     /// <summary>All club members first, then each team, then each group.</summary>
     public async Task<List<PotSource>> GetSourcesAsync(CancellationToken cancellationToken = default)
     {

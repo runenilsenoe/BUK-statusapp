@@ -146,15 +146,25 @@ public sealed class LoginFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task Overview_settings_expose_two_milestones_and_an_optional_buk_ajour_threshold()
+    public async Task Overview_has_ajour_threshold_and_settings_have_milestones_and_simulation()
     {
         var response = await Send(HttpMethod.Get, "/settings/oversikt", LoginCookie("21410"));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
         Assert.Contains("Milepæl 1 (%)", html);
         Assert.Contains("Milepæl 2 (%)", html);
-        Assert.Contains("BUK ajourgrense (%)", html);
-        Assert.Contains("placeholder=\"Automatisk\"", html);
+        Assert.DoesNotContain("BUK ajourgrense (%)", html);
+        Assert.Contains("Simuler ekstra pott", html);
+        Assert.Contains("Simulert beløp", html);
+        Assert.Contains("Flest mulig ajour", html);
+        var overviewResponse = await Send(HttpMethod.Get, "/oversikt", LoginCookie("21410"));
+        Assert.Equal(HttpStatusCode.OK, overviewResponse.StatusCode);
+        var overview = WebUtility.HtmlDecode(await overviewResponse.Content.ReadAsStringAsync());
+        Assert.Contains("BUK ajourgrense (%)", overview);
+        Assert.Contains("placeholder=\"Automatisk\"", overview);
+        Assert.DoesNotContain("Simuler ekstra pott", overview);
+        Assert.DoesNotContain("Simulert beløp", overview);
+        Assert.DoesNotContain("Flest mulig ajour", overview);
         Assert.DoesNotContain("Mål for samlet score (%)", html);
     }
 

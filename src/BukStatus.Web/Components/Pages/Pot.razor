@@ -14,7 +14,7 @@
     <div class="page-header">
         <h1>Oversikt@(screen is null ? "" : $": {screen.Source.Name}")</h1>
         <div class="actions">
-            <select @bind="sourceKey" @bind:after="SourceChanged" aria-label="Hvem skjermen gjelder">
+            <select @bind="sourceKey" @bind:after="SourceChanged" aria-label="Hvem skjermen gjelder" disabled="@savingAjour">
                 @foreach (var source in sources)
                 {
                     <option value="@source.Key">@source.Name</option>
@@ -36,21 +36,12 @@
     @if (!bigScreen)
     {
         <section class="pot-controls">
-            <label class="pot-slider">
-                <span>Simuler ekstra pott</span>
-                <input type="range" min="0" max="@SliderMax" step="@SliderStep" @bind="simulated" @bind:after="Load" />
-            </label>
             <label>
-                <span>Simulert beløp</span>
-                <input type="number" min="0" step="100" @bind="simulated" @bind:after="Load" aria-label="Simulert beløp" />
+                <span>BUK ajourgrense (%)</span>
+                <input type="number" min="0" max="100" step="any" @bind="ajourOverride" @bind:after="SaveAjour" placeholder="Automatisk" disabled="@(loading || savingAjour)" />
             </label>
-            <fieldset class="pot-strategy">
-                <legend>Fordeling</legend>
-                <label><input type="radio" name="strategy" checked="@(strategy == PotStrategy.Even)" @onchange="() => SetStrategy(PotStrategy.Even)" /> Likt på alle som ikke er ajour</label>
-                <label><input type="radio" name="strategy" checked="@(strategy == PotStrategy.MaximizeAjour)" @onchange="() => SetStrategy(PotStrategy.MaximizeAjour)" /> Flest mulig ajour</label>
-            </fieldset>
             <label class="pot-check"><input type="checkbox" @bind="sound" /> Lyd når noen blir ajour</label>
-            <button type="button" @onclick="Load" disabled="@loading">Oppdater nå</button>
+            <button type="button" @onclick="Load" disabled="@(loading || savingAjour)">Oppdater nå</button>
         </section>
     }
 
@@ -72,24 +63,21 @@
     private List<PotSource> sources = [];
     private string sourceKey = PotSource.AllTeamsKey;
     private PotScreen? screen;
-    private decimal simulated;
-    private PotStrategy strategy = PotStrategy.Even;
+    private decimal? ajourOverride;
+    private bool savingAjour;
     private bool sound;
     private bool bigScreen;
     private bool loading;
     private string? error;
     private DateTime? lastLoaded;
 
-    // Sound only plays when the ajour count goes up between refreshes of the same view, not when the slider moves.
-    private (string Source, decimal Simulated, PotStrategy Strategy)? previousView;
+    // A change of threshold must not trigger the ajour sound.
+    private (string Source, decimal? Threshold)? previousView;
     private int? previousAjourCount;
 
     private PeriodicTimer? timer;
     private CancellationTokenSource? cts;
     private IJSObjectReference? module;
-
-    private decimal SliderMax => Math.Max(10_000, Math.Ceiling((screen?.Result.RemainingBeforePot ?? 0) / 10_000) * 10_000);
-    private decimal SliderStep => SliderMax > 200_000 ? 5_000 : 1_000;
 
     protected override async Task OnInitializedAsync()
     {
@@ -118,7 +106,7 @@
         try
         {
             while (await timer.WaitForNextTickAsync(cts.Token))
-                await InvokeAsync(Load);
+                if (!savingAjour) await InvokeAsync(Load);
         }
         catch (OperationCanceledException)
         {
@@ -132,8 +120,8 @@
         loading = true;
         try
         {
-            simulated = Math.Max(0, simulated);
-            screen = await PotService.GetScreenAsync(sourceKey, simulated, strategy);
+            screen = await PotService.GetScreenAsync(sourceKey, 0, PotStrategy.Even);
+            ajourOverride = screen.Settings.BukAjourPercentOverride;
             sourceKey = screen.Source.Key;
             lastLoaded = DateTime.Now;
             error = null;
@@ -153,7 +141,7 @@
 
     private async Task PlaySoundIfNewAjour(PotScreen loaded)
     {
-        var view = (loaded.Source.Key, loaded.Simulated, loaded.Result.Strategy);
+        var view = (loaded.Source.Key, loaded.Settings.BukAjourPercentOverride);
         var count = loaded.Result.OnTrackWithPotCount;
         var sameView = previousView == view;
         var more = previousAjourCount is { } before && count > before;
@@ -180,10 +168,22 @@
         await Load();
     }
 
-    private async Task SetStrategy(PotStrategy value)
+    private async Task SaveAjour()
     {
-        strategy = value;
-        await Load();
+        savingAjour = true;
+        try
+        {
+            await PotService.SaveAjourPercentAsync(ajourOverride);
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            error = $"Kunne ikke lagre ajourgrensen: {ex.Message}";
+        }
+        finally
+        {
+            savingAjour = false;
+        }
     }
 
     private async Task ToggleBigScreen()

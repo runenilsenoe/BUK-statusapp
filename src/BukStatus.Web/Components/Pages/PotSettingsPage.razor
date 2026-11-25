@@ -36,10 +36,6 @@
                 <input type="number" min="0" max="100" step="any" @bind="settings.SamvirkPercent" />
             </label>
             <label>
-                BUK ajourgrense (%)
-                <input type="number" min="0" max="100" step="any" @bind="settings.BukAjourPercentOverride" placeholder="Automatisk" />
-            </label>
-            <label>
                 Milepæl 1 (%)
                 <input type="number" min="0.01" max="100" step="any" @bind="milestone1" />
             </label>
@@ -141,6 +137,36 @@
             </p>
         }
     </form>
+
+    <h2 class="form-section">Simulering</h2>
+    <section class="pot-controls">
+        <label>
+            Utvalg
+            <select @bind="simulationSource" @bind:after="Simulate">
+                @foreach (var source in simulationSources)
+                {
+                    <option value="@source.Key">@source.Name</option>
+                }
+            </select>
+        </label>
+        <label class="pot-slider">
+            <span>Simuler ekstra pott</span>
+            <input type="range" min="0" max="@SliderMax" step="@SliderStep" @bind="simulated" @bind:after="Simulate" />
+        </label>
+        <label>
+            <span>Simulert beløp</span>
+            <input type="number" min="0" step="100" @bind="simulated" @bind:after="Simulate" />
+        </label>
+        <fieldset class="pot-strategy">
+            <legend>Fordeling</legend>
+            <label><input type="radio" name="strategy" checked="@(strategy == PotStrategy.Even)" @onchange="() => SetStrategy(PotStrategy.Even)" /> Likt på alle som ikke er ajour</label>
+            <label><input type="radio" name="strategy" checked="@(strategy == PotStrategy.MaximizeAjour)" @onchange="() => SetStrategy(PotStrategy.MaximizeAjour)" /> Flest mulig ajour</label>
+        </fieldset>
+        <button type="button" @onclick="Simulate" disabled="@simulating">Vis simulering</button>
+    </section>
+    @if (simulationError is not null) { <p class="alert">@simulationError</p> }
+    @if (simulation is not null) { <PotBoard Screen="simulation" /> }
+
 }
 
 @code {
@@ -152,6 +178,15 @@
     private bool saved;
     private decimal? milestone1;
     private decimal? milestone2;
+    private List<PotSource> simulationSources = [];
+    private string simulationSource = PotSource.AllTeamsKey;
+    private decimal simulated;
+    private PotStrategy strategy;
+    private PotScreen? simulation;
+    private bool simulating;
+    private string? simulationError;
+    private decimal SliderMax => Math.Max(Math.Max(10000, simulated), Math.Ceiling((simulation?.Result.RemainingBeforePot ?? 0) / 10000) * 10000);
+    private decimal SliderStep => SliderMax > 200000 ? 5000 : 1000;
 
     protected override async Task OnInitializedAsync()
     {
@@ -160,6 +195,7 @@
         milestone1 = milestones.ElementAtOrDefault(0);
         milestone2 = milestones.ElementAtOrDefault(1);
         await RefreshSources();
+        simulationSources = await PotService.GetSourcesAsync();
     }
 
     private async Task RefreshSources()
@@ -186,9 +222,11 @@
         {
             settings.Milestones = string.Join(';', new[] { milestone1, milestone2 }
                 .Where(v => v.HasValue).Select(v => v!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            settings.BukAjourPercentOverride = (await PotService.GetSettingsAsync()).BukAjourPercentOverride;
             await PotService.SaveSettingsAsync(settings);
             saved = true;
             await RefreshSources();
+            if (simulation is not null) await Simulate();
         }
         catch (GroupException ex)
         {
@@ -198,6 +236,29 @@
         {
             busy = false;
         }
+    }
+
+    private async Task SetStrategy(PotStrategy value)
+    {
+        strategy = value;
+        await Simulate();
+    }
+
+    private async Task Simulate()
+    {
+        if (simulating) return;
+        simulating = true;
+        simulationError = null;
+        try
+        {
+            simulated = Math.Max(0, simulated);
+            simulation = await PotService.GetScreenAsync(simulationSource, simulated, strategy);
+        }
+        catch (Exception ex)
+        {
+            simulationError = $"Kunne ikke simulere: {ex.Message}";
+        }
+        finally { simulating = false; }
     }
 
     /// <summary>Fetches with the current (unsaved) values, so the org id and filter can be tried before saving.</summary>

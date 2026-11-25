@@ -100,9 +100,11 @@ public sealed class PotServiceTests : IDisposable
         await _teams.AddMemberAsync(team.Id, 2, "Two");
         var extra = new ExtraContributionsService([], new MemoryCache(new MemoryCacheOptions()), NullLogger<ExtraContributionsService>.Instance);
         var pot = new PotService(_factory, _teams, _groups, new FixedStatuses(), extra, TimeProvider.System);
-        var settings = new PotSettings { Title = "Test", BukAjourPercentOverride = 50, ExtraContributions = 1000, SamvirkPercent = 60, Milestones = "72.5;85" };
+        var settings = new PotSettings { Title = "Test", ExtraContributions = 1000, SamvirkPercent = 60, Milestones = "72.5;85" };
         await pot.SaveSettingsAsync(settings);
+        await pot.SaveAjourPercentAsync(50);
         Assert.Equal(50m, (await pot.GetSettingsAsync()).BukAjourPercentOverride);
+        Assert.Equal(1000, (await pot.GetSettingsAsync()).ExtraContributions);
         var screen = await pot.GetScreenAsync(null, 0, PotStrategy.Even);
         Assert.Equal([72.5m, 85m], screen.Settings.MilestoneList);
         var one = Assert.Single(screen.Result.Members, m => m.PersonId == 1);
@@ -115,8 +117,7 @@ public sealed class PotServiceTests : IDisposable
         Assert.Equal(4000, two.RemainingWithPot);
         Assert.Equal(50, screen.Result.OnTrackWithPotPercent);
         Assert.Equal(55m, screen.CombinedPercent);
-        settings.BukAjourPercentOverride = null;
-        await pot.SaveSettingsAsync(settings);
+        await pot.SaveAjourPercentAsync(null);
         Assert.Null((await pot.GetSettingsAsync()).BukAjourPercentOverride);
         var automatic = await pot.GetScreenAsync(null, 0, PotStrategy.Even);
         Assert.Equal(9000, automatic.Result.Members.Single(m => m.PersonId == 1).Status.AjourTarget);
@@ -129,6 +130,7 @@ public sealed class PotServiceTests : IDisposable
     public async Task Ajour_override_rejects_invalid_percentages(decimal percent)
     {
         await Assert.ThrowsAsync<GroupException>(() => _pot.SaveSettingsAsync(new() { BukAjourPercentOverride = percent }));
+        await Assert.ThrowsAsync<GroupException>(() => _pot.SaveAjourPercentAsync(percent));
         Assert.Null((await _pot.GetSettingsAsync()).BukAjourPercentOverride);
     }
 
