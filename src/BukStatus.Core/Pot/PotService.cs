@@ -132,7 +132,6 @@ public class PotService(
     {
         var settings = await GetSettingsAsync(cancellationToken);
         var (source, members) = await GetMembersAsync(sourceKey, cancellationToken);
-        var selectedPersonIds = members.Select(m => m.PersonId).ToHashSet();
         var scope = await GetScopeAsync(cancellationToken);
         var campaign = scope is null || myshare is null ? null : await myshare.GetCampaignAsync(scope, Today, cancellationToken);
         var campaignById = campaign?.ToDictionary(p => p.PersonId);
@@ -150,10 +149,16 @@ public class PotService(
         var statusTask = statuses.GetStatusesAsync(members.Select(m => m.PersonId), cancellationToken);
         var ledgerTask = GetLedgerAsync(settings, cancellationToken);
         var memberStatuses = await statusTask;
+        var ledger = await ledgerTask;
+        var yearStart = new DateOnly(Today.Year, 1, 1);
+        var adjustmentLedger = (settings.ExtraFrom ?? yearStart) <= yearStart && (settings.ExtraTo ?? Today) >= Today
+            ? ledger
+            : await transactions.GetForOverviewAsync(yearStart, Today, cancellationToken);
+        memberStatuses = EasterCampAdjustment.Apply(memberStatuses,
+            adjustmentLedger.Rows.Where(r => r.Date >= yearStart && r.Date <= Today));
         if (settings.BukAjourPercentOverride is { } ajourPercent)
             memberStatuses = memberStatuses.ToDictionary(p => p.Key,
                 p => p.Value with { AjourTarget = p.Value.TotalTarget * ajourPercent / 100, AjourUntil = null });
-        var ledger = await ledgerTask;
         var extra = await CalculateExtraAsync(ledger, cancellationToken);
 
         simulated = Math.Max(0, simulated);
@@ -165,8 +170,7 @@ public class PotService(
         var snapshot = await SamvirkService.ReadLatestAsync(db, cancellationToken);
         return new PotScreen(source, settings, extra, simulated, result)
         {
-            Collection = CollectionTotals.Build(source.Key == PotSource.AllTeamsKey ? ledger.Rows
-                : ledger.Rows.Where(r => selectedPersonIds.Contains(r.PersonId)),
+            Collection = CollectionTotals.Build(ledger.Rows,
                 settings.ExtraFrom ?? new DateOnly(Today.Year, 1, 1), settings.ExtraTo ?? Today),
             Samvirk = snapshot is null ? null : SamvirkProgress.Build(snapshot, samvirkMemberIds)
         };

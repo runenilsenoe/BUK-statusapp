@@ -160,6 +160,28 @@ public sealed class PotServiceTests : IDisposable
         Assert.Equal(130, (await pot.GetSettingsAsync()).BukAjourPercentOverride);
     }
 
+    [Fact]
+    public async Task Easter_adjustment_precedes_override_and_is_independent_of_collection_period()
+    {
+        var today = new DateOnly(2026, 11, 25);
+        var team = await _teams.CreateAsync("Test");
+        await _teams.AddMemberAsync(team.Id, 1, "One");
+        var ledger = Ledger(new RowsSource([new(1, new(today.Year, 4, 1), 2000, "Fratrekk Påskecamp")]));
+        var pot = new PotService(_factory, _teams, _groups, new FixedStatuses(), ledger, new FixedClock());
+        await pot.SaveSettingsAsync(new() { BukAjourPercentOverride = 120, ExtraFrom = new(today.Year, 11, 1) });
+        var screen = await pot.GetScreenAsync(null, 0, PotStrategy.Even);
+        var member = Assert.Single(screen.Result.Members);
+        Assert.Equal(8000, member.Status.TotalTarget);
+        Assert.Equal(3000, member.Status.TotalContribution);
+        Assert.Equal(9600, member.Status.AjourTarget);
+        Assert.Equal(0, screen.Collection!.Total);
+    }
+
+    private sealed class FixedClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2026, 11, 25, 12, 0, 0, TimeSpan.Zero);
+    }
+
     private sealed class FixedStatuses : IMemberStatusService
     {
         public Task<IReadOnlyDictionary<int, MemberStatusSnapshot>> GetStatusesAsync(IEnumerable<int> ids, CancellationToken ct = default) =>
@@ -318,7 +340,7 @@ public sealed class PotServiceTests : IDisposable
         Assert.Equal(4, extra.Count);
         var teamScreen = await pot.GetScreenAsync(PotSource.TeamKey(team.Id), 0, PotStrategy.Even);
         Assert.Equal(650, teamScreen.Extra.Amount);
-        Assert.Equal(400, teamScreen.Collection!.Total);
+        Assert.Equal(2050, teamScreen.Collection!.Total);
         var simulated = await pot.GetScreenAsync(null, 2000, PotStrategy.Even);
         Assert.Equal(650, simulated.Extra.Amount);
         Assert.Equal(2650, simulated.Result.Pot);

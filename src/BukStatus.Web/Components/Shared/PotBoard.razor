@@ -13,7 +13,7 @@
         <div><dt>Inntekter</dt><dd>@Format.Kr(collection.Revenue)</dd></div>
         <div><dt>Driftsdugnad / pappbuene</dt><dd>@Format.Kr(collection.Operations)</dd></div>
     </dl>
-    <p class="muted small">@collection.From.ToString("dd.MM.yyyy")–@collection.To.ToString("dd.MM.yyyy")</p>
+    <p class="muted small">Hele klubben · @collection.From.ToString("dd.MM.yyyy")–@collection.To.ToString("dd.MM.yyyy")</p>
 }
 
 @if (result.Count > 0 || Screen.Samvirk?.ActiveCount > 0)
