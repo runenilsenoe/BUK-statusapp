@@ -185,6 +185,10 @@ namespace BukStatus.Core.Groups.Migrations
                     b.Property<int>("Id")
                         .HasColumnType("INTEGER");
 
+                    b.Property<decimal?>("BukAjourPercentOverride")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("TEXT");
+
                     b.Property<decimal>("ExtraContributions")
                         .HasPrecision(18, 2)
                         .HasColumnType("TEXT");

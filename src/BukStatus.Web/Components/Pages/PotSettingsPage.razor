@@ -36,8 +36,16 @@
                 <input type="number" min="0" max="100" step="any" @bind="settings.SamvirkPercent" />
             </label>
             <label>
-                Mål for samlet score (%)
-                <input @bind="settings.Milestones" maxlength="100" placeholder="70;75" />
+                BUK ajourgrense (%)
+                <input type="number" min="0" max="100" step="any" @bind="settings.BukAjourPercentOverride" placeholder="Automatisk" />
+            </label>
+            <label>
+                Milepæl 1 (%)
+                <input type="number" min="0.01" max="100" step="any" @bind="milestone1" />
+            </label>
+            <label>
+                Milepæl 2 (%)
+                <input type="number" min="0.01" max="100" step="any" @bind="milestone2" />
             </label>
         </div>
         @if (Clubs.Enabled)
@@ -142,10 +150,15 @@
     private string? error;
     private bool busy;
     private bool saved;
+    private decimal? milestone1;
+    private decimal? milestone2;
 
     protected override async Task OnInitializedAsync()
     {
         settings = await PotService.GetSettingsAsync();
+        var milestones = settings.MilestoneList.Select(v => (decimal?)v).ToArray();
+        milestone1 = milestones.ElementAtOrDefault(0);
+        milestone2 = milestones.ElementAtOrDefault(1);
         await RefreshSources();
     }
 
@@ -171,6 +184,8 @@
         saved = false;
         try
         {
+            settings.Milestones = string.Join(';', new[] { milestone1, milestone2 }
+                .Where(v => v.HasValue).Select(v => v!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)));
             await PotService.SaveSettingsAsync(settings);
             saved = true;
             await RefreshSources();

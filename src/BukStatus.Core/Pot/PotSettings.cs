@@ -21,6 +21,9 @@ public class PotSettings
     /// <summary>Samvirk's ajour share in percent (0-100). It's not in the BCC API, so it's typed in.</summary>
     public decimal SamvirkPercent { get; set; }
 
+    /// <summary>Optional ajour threshold as a percentage of each member's total target.</summary>
+    public decimal? BukAjourPercentOverride { get; set; }
+
     /// <summary>
     /// Extra contributions (kr) typed in by hand: money collected outside the members' own targets, e.g. donations
     /// from people without a contribution plan. Used in manual mode, and as a fallback when fetching fails.

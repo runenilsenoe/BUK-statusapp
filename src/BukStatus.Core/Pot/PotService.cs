@@ -56,6 +56,8 @@ public class PotService(
             throw new GroupException("Skjermen må ha en overskrift.");
         if (settings.SamvirkPercent is < 0 or > 100)
             throw new GroupException("Samvirk må være mellom 0 og 100 %.");
+        if (settings.BukAjourPercentOverride is < 0 or > 100)
+            throw new GroupException("BUK ajourgrense må være mellom 0 og 100 %.");
         if (settings.ExtraContributions < 0)
             throw new GroupException("Ekstrabidrag kan ikke være negativt.");
 
@@ -82,6 +84,7 @@ public class PotService(
         row.Title = settings.Title.Trim();
         row.Subtitle = string.IsNullOrWhiteSpace(settings.Subtitle) ? null : settings.Subtitle.Trim();
         row.SamvirkPercent = settings.SamvirkPercent;
+        row.BukAjourPercentOverride = settings.BukAjourPercentOverride;
         row.ExtraContributions = settings.ExtraContributions;
         row.Milestones = string.Join(';', milestones);
         row.PublicScreenEnabled = settings.PublicScreenEnabled;
@@ -128,6 +131,9 @@ public class PotService(
         var statusTask = statuses.GetStatusesAsync(members.Select(m => m.PersonId), cancellationToken);
         var extraTask = GetExtraContributionsAsync(settings, cancellationToken);
         var memberStatuses = await statusTask;
+        if (settings.BukAjourPercentOverride is { } ajourPercent)
+            memberStatuses = memberStatuses.ToDictionary(p => p.Key,
+                p => p.Value with { AjourTarget = p.Value.TotalTarget * ajourPercent / 100, AjourUntil = null });
         var extra = await extraTask;
 
         simulated = Math.Max(0, simulated);

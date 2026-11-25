@@ -93,6 +93,63 @@ public sealed class PotServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Ajour_override_updates_targets_pot_allocation_and_score_and_can_be_cleared()
+    {
+        var team = await _teams.CreateAsync("Test");
+        await _teams.AddMemberAsync(team.Id, 1, "One");
+        await _teams.AddMemberAsync(team.Id, 2, "Two");
+        var extra = new ExtraContributionsService([], new MemoryCache(new MemoryCacheOptions()), NullLogger<ExtraContributionsService>.Instance);
+        var pot = new PotService(_factory, _teams, _groups, new FixedStatuses(), extra, TimeProvider.System);
+        var settings = new PotSettings { Title = "Test", BukAjourPercentOverride = 50, ExtraContributions = 1000, SamvirkPercent = 60, Milestones = "72.5;85" };
+        await pot.SaveSettingsAsync(settings);
+        Assert.Equal(50m, (await pot.GetSettingsAsync()).BukAjourPercentOverride);
+        var screen = await pot.GetScreenAsync(null, 0, PotStrategy.Even);
+        Assert.Equal([72.5m, 85m], screen.Settings.MilestoneList);
+        var one = Assert.Single(screen.Result.Members, m => m.PersonId == 1);
+        var two = Assert.Single(screen.Result.Members, m => m.PersonId == 2);
+        Assert.Equal(5000, one.Status.AjourTarget);
+        Assert.True(one.IsOnTrack);
+        Assert.Equal(100, one.AjourPercent);
+        Assert.Equal(10000, two.Status.AjourTarget);
+        Assert.Equal(1000, two.Boost);
+        Assert.Equal(4000, two.RemainingWithPot);
+        Assert.Equal(50, screen.Result.OnTrackWithPotPercent);
+        Assert.Equal(55m, screen.CombinedPercent);
+        settings.BukAjourPercentOverride = null;
+        await pot.SaveSettingsAsync(settings);
+        Assert.Null((await pot.GetSettingsAsync()).BukAjourPercentOverride);
+        var automatic = await pot.GetScreenAsync(null, 0, PotStrategy.Even);
+        Assert.Equal(9000, automatic.Result.Members.Single(m => m.PersonId == 1).Status.AjourTarget);
+        Assert.Equal(0, automatic.Result.OnTrackWithPotCount);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(101)]
+    public async Task Ajour_override_rejects_invalid_percentages(decimal percent)
+    {
+        await Assert.ThrowsAsync<GroupException>(() => _pot.SaveSettingsAsync(new() { BukAjourPercentOverride = percent }));
+        Assert.Null((await _pot.GetSettingsAsync()).BukAjourPercentOverride);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(100)]
+    [InlineData(72.5)]
+    public async Task Ajour_override_accepts_bounds_and_fractional_percentages(decimal percent)
+    {
+        await _pot.SaveSettingsAsync(new() { BukAjourPercentOverride = percent });
+        Assert.Equal(percent, (await _pot.GetSettingsAsync()).BukAjourPercentOverride);
+    }
+
+    private sealed class FixedStatuses : IMemberStatusService
+    {
+        public Task<IReadOnlyDictionary<int, MemberStatusSnapshot>> GetStatusesAsync(IEnumerable<int> ids, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<int, MemberStatusSnapshot>>(ids.ToDictionary(id => id,
+                id => new MemberStatusSnapshot(id, 5000, id * 10000, id * 9000, null, 0)));
+    }
+
+    [Fact]
     public async Task Screen_covers_all_teams_one_team_or_one_group()
     {
         var a = await _teams.CreateAsync("A");

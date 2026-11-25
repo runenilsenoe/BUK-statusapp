@@ -146,6 +146,19 @@ public sealed class LoginFlowTests : IDisposable
     }
 
     [Fact]
+    public async Task Overview_settings_expose_two_milestones_and_an_optional_buk_ajour_threshold()
+    {
+        var response = await Send(HttpMethod.Get, "/settings/oversikt", LoginCookie("21410"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+        Assert.Contains("Milepæl 1 (%)", html);
+        Assert.Contains("Milepæl 2 (%)", html);
+        Assert.Contains("BUK ajourgrense (%)", html);
+        Assert.Contains("placeholder=\"Automatisk\"", html);
+        Assert.DoesNotContain("Mål for samlet score (%)", html);
+    }
+
+    [Fact]
     public async Task Monthly_report_has_team_tabs_and_scopes_samvirk_rows_to_selected_team()
     {
         var factory = _app.Services.GetRequiredService<IDbContextFactory<BukStatusDbContext>>();
